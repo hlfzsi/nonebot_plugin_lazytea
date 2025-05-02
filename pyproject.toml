@@ -1,0 +1,19 @@
+[project]
+name = "nonebot_plugin_noobui"
+version = "0.0.1a1"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "beautifulsoup4>=4.13.3",
+    "httpx>=0.28.1",
+    "markdown2>=2.5.3",
+    "nonebot2>=2.4.2",
+    "qasync>=0.27.1",
+    "fastapi>=0.115.12",
+    "pyqt5>=5.15.11",
+    "websockets>=15.0.1",
+]
+
+[tool.pdm.build]
+includes = ["nonebot_plugin_noobui/ui/resources/**/*.ico"]
