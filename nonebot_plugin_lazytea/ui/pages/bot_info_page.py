@@ -9,12 +9,14 @@ from PySide6.QtGui import (QColor, QPainter, QBrush, QPainterPath,
 
 from .base_page import PageBase
 from .utils.BotTools import BotToolKit
-from .utils.client import talker
+from .utils.subpages.roster import PermissionConfigurator
+from .utils.client import talker, ResponsePayload
 
 
 class BotCard(QFrame):
     """Bot卡片"""
     status_changed = Signal(bool)
+    matcher_signal = Signal(ResponsePayload)
 
     def __init__(self, bot_id: str, adapter: str, parent=None):
         super().__init__(parent)
@@ -31,6 +33,7 @@ class BotCard(QFrame):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
         self.status_changed.connect(self._toggle_status)
+        self.matcher_signal.connect(self._roster)
 
     @property
     def original_theme_color(self):
@@ -315,11 +318,32 @@ class BotCard(QFrame):
         status_action = menu.addAction("下线" if self._is_online else "上线")
         menu.addAction("📊 统计详情")
         menu.addSeparator()
-        menu.addAction("⚙️ 配置设置")
+        roster_action = menu.addAction("⚙️ 名单设置")
 
         action = menu.exec_(self.mapToGlobal(pos))
         if action == status_action:
             self._toggle_status()
+
+        elif action == roster_action:
+            talker.send_request(
+                "get_matchers", success_signal=self.matcher_signal)
+
+    def _roster(self, data: ResponsePayload):
+        page = PermissionConfigurator(data.data, bot_id=self.bot_id)
+        parent = self.parent()
+        show_method = None
+
+        while parent is not None:
+            method = getattr(parent, "show_subpage", None)
+
+            if callable(method):
+                show_method = method
+                break
+
+            parent = parent.parent()
+
+        if show_method:
+            show_method(page, f"{self.bot_id} 命令管理")
 
     def _toggle_status(self, status: Optional[bool] = None):
         if status is None:

@@ -125,6 +125,9 @@ class WidgetFactory:
             Tuple[容器控件, 取值函数, 设值函数]
         """
         container = QWidget()
+        container.setSizePolicy(QSizePolicy.Policy.Expanding,
+                                QSizePolicy.Policy.Preferred)
+
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
@@ -135,6 +138,11 @@ class WidgetFactory:
 
         status_label = QLabel("已启用" if default else "已禁用")
         status_label.setProperty("class", "checkbox-status")
+        status_label.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
+        # 确保标签有最小宽度
+        status_label.setMinimumWidth(80)
         StyleManager.apply_style(status_label)
 
         def update_label(state: int) -> None:
@@ -154,6 +162,16 @@ class WidgetFactory:
         layout.addWidget(checkbox)
         layout.addWidget(status_label)
         layout.addStretch()
+
+        container.setStyleSheet("""
+            QWidget {
+                background-color: white;
+            }
+            QLabel.checkbox-status {
+                color: #495057;
+                background-color: transparent;
+            }
+        """)
 
         return container, checkbox.isChecked, checkbox.setChecked
 
@@ -505,10 +523,9 @@ class ConfigEditor(QWidget):
 
         self.setLayout(main_layout)
         self.setWindowTitle("配置编辑器")
-        self.resize(800, 600)
         self.setStyleSheet("""
             QWidget {
-                background-color: #ffffff;
+                background-color: white;
                 font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
             }
         """)

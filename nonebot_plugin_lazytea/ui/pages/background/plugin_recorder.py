@@ -20,7 +20,7 @@ class Recorder(QObject):
         group_id = data.get("groupid")
         user_id = data.get("userid")
         plugin_name = data.get("plugin")
-        matcher_hash = data.get("matcher_hash", "")
+        matcher_hash = ",".join(data.get("matcher_hash", ""))
         exception = data.get("exception")
         exception_name = exception.get(
             "name") if isinstance(exception, dict) else None

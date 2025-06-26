@@ -233,7 +233,7 @@ class MessageHandler(QObject):
             if error_signal := request_info["error_signal"]:
                 error_signal.emit(response)
             else:
-                raise RuntimeWarning(
+                raise ValueError(
                     f"An Exception occurred while processing {error}")
         elif success_signal := request_info["success_signal"]:
             success_signal.emit(response)

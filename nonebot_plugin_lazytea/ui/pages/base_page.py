@@ -1,4 +1,5 @@
-from PySide6.QtCore import QTimer, Signal, QMutex, QMutexLocker
+from threading import Lock
+from PySide6.QtCore import QTimer, Signal, QMutex
 from PySide6.QtWidgets import QWidget
 
 
@@ -6,6 +7,7 @@ class PageBase(QWidget):
     """防抖页面基类（单例模式）"""
     _instances = {}
     _mutex = QMutex()
+    _lock = Lock()
 
     page_enter = Signal()  # 页面进入可视范围（防抖后）
     page_leave = Signal()  # 页面离开可视范围（防抖后）
@@ -14,7 +16,7 @@ class PageBase(QWidget):
 
     def __new__(cls, *args, **kwargs):
         if cls not in cls._instances:
-            with QMutexLocker(cls._mutex):
+            with cls._lock:
                 if cls not in cls._instances:
                     instance = super().__new__(cls)
                     cls._instances[cls] = instance

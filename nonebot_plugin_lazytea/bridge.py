@@ -1,8 +1,8 @@
 import time
-from hashlib import sha256
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from nonebot import get_driver, logger
 from nonebot.typing import T_State
+from nonebot.exception import IgnoredException
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters import Bot, Event, Message
 from nonebot.message import event_preprocessor, run_preprocessor, run_postprocessor
@@ -10,6 +10,7 @@ from nonebot_plugin_session import extract_session
 
 from .utils.commute import send_event
 from .utils.parse import get_function_fingerprint
+from .utils.roster import FuncTeller, RuleData
 
 driver = get_driver()
 
@@ -138,10 +139,18 @@ async def reocrd_event(bot: Bot, event: Event):
 async def run_pre(bot: Bot, event: Event, matcher: Matcher, state: T_State):
     session = extract_session(bot, event)
     group_id = session.id2
-    user_id = session.id1
-    plugin_name = matcher.plugin_name
-    # todo 检查黑名单
-    ...
+    user_id = session.id1 or ""
+    plugin_name = matcher.plugin_name or "Unknown"
+
+    current_rule = RuleData.extract_rule(matcher)
+    standard_model = await FuncTeller.get_model()
+    permission = standard_model.perm(bot.self_id, plugin_name,
+                                     user_id, group_id, current_rule)
+
+    if not permission:
+        logger.debug("消息被LazyTea拦截")
+        raise IgnoredException("LazyTea命令开关判断跳过")
+
     state[f"UI{plugin_name}{hash(matcher)}"] = time.time()
 
 
@@ -156,7 +165,7 @@ async def run_post(bot: Bot, event: Event, matcher: Matcher, exception: Optional
         user_id = session.id1
 
         special = [i.call for i in matcher.handlers]
-        special = "".join([get_function_fingerprint(i) for i in special])
+        special = [get_function_fingerprint(plugin_name, i) for i in special]
 
         data = {
             "bot": bot.self_id,
@@ -165,7 +174,7 @@ async def run_post(bot: Bot, event: Event, matcher: Matcher, exception: Optional
             "groupid": group_id,
             "userid": user_id,
             "plugin": plugin_name,
-            "matcher_hash": sha256(special.encode()).hexdigest(),
+            "matcher_hash": special,
             "exception": {"name": type(exception).__name__ if exception else None,
                           "detail": str(exception) if exception else None}
         }

@@ -6,6 +6,7 @@ import subprocess
 from importlib.resources import files, as_file
 
 from nonebot import get_driver, require
+require("nonebot_plugin_localstore")
 from nonebot.drivers import ASGIMixin, WebSocket, WebSocketServerSetup, URL
 from nonebot.plugin import PluginMetadata
 
@@ -15,12 +16,10 @@ from .utils.commute import server_send_queue
 from .ipc import server, Server
 from .bridge import for_import as _
 
-require("nonebot_plugin_localstore")
 import nonebot_plugin_localstore    # noqa
 
 __version__ = "0.0.1a2"
 __author__ = "hlfzsi"
-
 
 try:
     resource_ref = files(__package__).joinpath("ui", "resources", "app.ico")

@@ -8,6 +8,8 @@ from nonebot import get_plugin_config as nb_config
 from .server import Server
 from ..utils.config import _config
 from .envhandler import EnvWriter
+from ..utils.roster import FuncTeller
+
 server = Server()
 
 
@@ -94,3 +96,14 @@ async def save_env(module_name: str, data: Dict):
             else:
                 asyncio.create_task(asyncio.to_thread(handler(new_config)))
         return True
+
+
+@server.register_handler("get_matchers")
+async def get_matchers():
+    """获取所有插件的匹配器信息"""
+    return await FuncTeller.get_model()
+
+
+@server.register_handler("sync_matchers")
+async def sync_matchers(new_roster: str):
+    await FuncTeller.sync(new_roster)

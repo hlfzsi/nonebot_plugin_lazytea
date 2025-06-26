@@ -13,6 +13,12 @@ dependencies = [
     "aiofiles>=24.1.0",
     "websockets>=15.0.1",
     "pydantic>=2.0.0",
+    "sqlalchemy>=2.0.41",
+    "nonebot-plugin-session>=0.3.2",
+    "apsw>=3.50.1.0",
+    "thulac>=0.2.2",
+    "nonebot-plugin-localstore>=0.7.4",
+    "xxhash>=3.5.0",
 ]
 
 [[tool.uv.index]]

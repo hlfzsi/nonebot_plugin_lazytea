@@ -247,7 +247,7 @@ class MainWindow(QWidget):
         self.init_ui()
         self.setWindowTitle("TEEEA")
         self.setup_tray()
-        self.resize_to_screen_ratio(0.618)
+        self.resize_to_screen_ratio(0.619)
         self.setup_styles()
         self.stack.setObjectName("mainStack")
 
@@ -376,12 +376,18 @@ class MainWindow(QWidget):
             self.current_overlay.show()
 
     def resize_to_screen_ratio(self, ratio: float = 0.618):
-        screen = self.screen()  # 多屏幕支持
+        screen = self.screen()
         if not screen:
             screen = QGuiApplication.primaryScreen()
         screen_rect = screen.geometry()
-        width = int(screen_rect.width() * ratio)
+
         height = int(screen_rect.height() * ratio)
+        width = int(height * (16 / 9))
+
+        if width > screen_rect.width():
+            width = int(screen_rect.width() * ratio)
+            height = int(width * (9 / 16))
+
         self.resize(width, height)
 
     def load_decoration_image(self) -> None:
