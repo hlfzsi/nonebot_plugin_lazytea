@@ -75,6 +75,9 @@ class AsyncQueryRunner(QRunnable):
         except Exception as e:
             error = e
             logger.error(f"Query execution failed: {e}")
+            logger.error(f"fail sql: {self.sql}  \nparams:  {self.params}")
+            import traceback
+            traceback.print_exc()
         finally:
             if conn:
                 self.connection_pool.release_connection(conn)

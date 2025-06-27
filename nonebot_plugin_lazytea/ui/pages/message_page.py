@@ -1,11 +1,12 @@
 import time
 import ujson
+import thulac
 from typing import Dict, List, Literal, Optional, Tuple
 
 from PySide6.QtCore import Qt, QTimer, QPoint, Signal
 from PySide6.QtWidgets import (QVBoxLayout, QHBoxLayout, QCheckBox, QListWidget,
                                QListWidgetItem, QLabel, QWidget, QApplication,
-                               QMenu, QScrollBar)
+                               QMenu, QScrollBar, QPushButton)
 
 from .utils.client import talker
 from .utils.BotTools import BotToolKit
@@ -42,6 +43,45 @@ class ModernScrollBar(QScrollBar):
         """)
 
 
+class SearchBar(QWidget):
+    """搜索状态条带"""
+
+    def __init__(self, keywords: List[str], parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self.setStyleSheet("""
+            background: #E3F2FD;
+            padding: 8px;
+            border-radius: 4px;
+        """)
+
+        layout = QHBoxLayout()
+        layout.setContentsMargins(8, 4, 8, 4)
+
+        search_label = QLabel(f"{'、'.join(keywords)}")
+        search_label.setStyleSheet("font-size: 13px; color: #0D47A1;")
+
+        self.exit_button = QPushButton("退出搜索")
+        self.exit_button.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: 1px solid #0D47A1;
+                color: #0D47A1;
+                border-radius: 4px;
+                padding: 2px 8px;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background: #BBDEFB;
+            }
+        """)
+
+        layout.addWidget(search_label)
+        layout.addStretch()
+        layout.addWidget(self.exit_button)
+
+        self.setLayout(layout)
+
+
 class MessagePage(PageBase):
     """消息主页面"""
 
@@ -53,6 +93,7 @@ class MessagePage(PageBase):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self._auto_scroll = True
+        self.thu = thulac.thulac(filt=True)
         # 状态枚举: 显示中、隐藏、搜索中、加载更早消息、进入页面拉取消息
         self.state: Literal["on_show", "hidden", "searching",
                             "loading_earlier", "loading"] = "hidden"
@@ -64,6 +105,8 @@ class MessagePage(PageBase):
         self.search_keywords = []       # 搜索关键词
 
         self.reached_earliest = False  # 是否已到达最早消息
+
+        self.search_bar = None  # 搜索状态条带
 
         self._setup_ui()
         self._setup_context_menu()
@@ -183,7 +226,10 @@ class MessagePage(PageBase):
         self.state = "searching"
         self.list_widget.clear()
 
-        fts_query = ' OR '.join(keywords)
+        self._add_search_bar(keywords)
+
+        fts_query = ' OR '.join(
+            f'"{keyword}"' for keyword in keywords if keyword.strip())
 
         query = """
             SELECT rowid, bm25(message_for_fts) as score
@@ -203,6 +249,18 @@ class MessagePage(PageBase):
             callback_signal=signal,
             for_write=False
         )
+
+    def _add_search_bar(self, keywords: List[str]):
+        """添加搜索状态条带"""
+        if self.search_bar:
+            self.main_layout.removeWidget(self.search_bar)
+            self.search_bar.deleteLater()
+
+        self.search_bar = SearchBar(keywords, self)
+        self.search_bar.exit_button.clicked.connect(self.exit_search)
+
+        # 将搜索条带插入到标题和消息列表之间
+        self.main_layout.insertWidget(1, self.search_bar)
 
     def _handle_search_results(self, results: List[Tuple], error: Exception):
         if error or not results:
@@ -240,6 +298,11 @@ class MessagePage(PageBase):
 
     def exit_search(self):
         """退出搜索模式"""
+        if self.search_bar:
+            self.main_layout.removeWidget(self.search_bar)
+            self.search_bar.deleteLater()
+            self.search_bar = None
+
         self.search_keywords = []
         self.list_widget.clear()
         self.state = "on_show"
@@ -251,15 +314,15 @@ class MessagePage(PageBase):
     def _setup_ui(self) -> None:
         """初始化页面UI"""
         self.setStyleSheet("background: #FAFAFA;")
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(20, 15, 20, 15)
-        main_layout.setSpacing(15)
+        self.main_layout = QVBoxLayout()
+        self.main_layout.setContentsMargins(20, 15, 20, 15)
+        self.main_layout.setSpacing(15)
 
-        self._add_title(main_layout)
-        self._setup_message_list(main_layout)
-        self._setup_control_bar(main_layout)
+        self._add_title(self.main_layout)
+        self._setup_message_list(self.main_layout)
+        self._setup_control_bar(self.main_layout)
 
-        self.setLayout(main_layout)
+        self.setLayout(self.main_layout)
 
     def _add_title(self, layout: QVBoxLayout) -> None:
         """添加标题，并在右侧添加一个样式相同的 QLabel"""
@@ -310,12 +373,22 @@ class MessagePage(PageBase):
         self.auto_scroll_check = QCheckBox("自动滚动")
         self.auto_scroll_check.setStyleSheet("""
             QCheckBox { 
-                color: #616161; 
-                font-size: 13px; 
+                color: #000000;
+                font-size: 13px;
+                border: 1px solid #000000;
+                border-radius: 4px; 
+                padding: 2px 4px;
             }
             QCheckBox::indicator { 
                 width: 16px; 
                 height: 16px; 
+                border: 1px solid #000000;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #87CEFA;
+            }
+            QCheckBox:hover {
+                background-color: #F0F0F0;
             }
         """)
         self.auto_scroll_check.setChecked(True)
@@ -359,10 +432,13 @@ class MessagePage(PageBase):
             }
         """)
         copy_action = menu.addAction("📋 复制内容")
+        search_action = menu.addAction("💬话题追踪")
         action = menu.exec_(self.list_widget.mapToGlobal(pos))
 
         if action == copy_action:
             self._copy_content(item)
+        elif action == search_action:
+            self._search(item)
 
     def _copy_content(self, item: QListWidgetItem) -> None:
         """复制消息内容"""
@@ -370,10 +446,45 @@ class MessagePage(PageBase):
             widget: MessageBubble
             QApplication.clipboard().setText(widget.original_content)
 
+    def _search(self, item: QListWidgetItem) -> None:
+        if widget := self.list_widget.itemWidget(item):  # type: ignore
+            widget: MessageBubble
+            content = widget.content.toPlainText()
+
+            words = self.thu.cut(content)
+
+            important_pos = {'n': 4,    # 名词-权重4
+                             'v': 3,     # 动词-权重3
+                             'ws': 5,    # 专名-权重5
+                             'a': 2,     # 形容词-权重2
+                             'i': 1,    # 成语-权重1
+                             'l': 1}     # 习用语-权重1
+
+            keywords_with_weight = []
+            for word, pos in words:
+                word = word.strip()
+                if pos in important_pos and word:
+                    weight = important_pos[pos] + len(word)/10
+                    keywords_with_weight.append((word, weight))
+
+            if not keywords_with_weight:
+                self.search_messages([content])
+                return
+
+            keywords_with_weight.sort(key=lambda x: x[1], reverse=True)
+
+            top_keywords = [kw[0] for kw in keywords_with_weight[:5]]
+
+            self.search_messages(top_keywords)
+
     def add_message(self, metadata: MetadataType, content: str,
                     accent_color: Optional[str] = None) -> None:
         """添加新消息"""
         metadata = metadata.copy()
+        if bot := metadata.get("bot"):
+            metadata["bot"] = (bot[0], bot[1].replace(
+                "{bot_color}", BotToolKit.color.get(bot[0])))
+
         if time_ := metadata.get("time"):
             try:
                 if time_[0]:
@@ -427,7 +538,7 @@ class MessagePage(PageBase):
         metadata = {
             "bot": (
                 bot,
-                f"color: {BotToolKit.color.get(bot)}; font-weight: bold;",
+                "color: {bot_color}; font-weight: bold;",
             ),
             "time": (
                 timestamps,
@@ -547,3 +658,7 @@ class MessagePage(PageBase):
         """离开页面时调用"""
         self.state = "hidden"
         self.list_widget.clear()
+        if self.search_bar:
+            self.main_layout.removeWidget(self.search_bar)
+            self.search_bar.deleteLater()
+            self.search_bar = None

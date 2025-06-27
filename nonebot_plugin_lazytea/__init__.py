@@ -18,7 +18,7 @@ from .bridge import for_import as _
 
 import nonebot_plugin_localstore    # noqa
 
-__version__ = "0.0.1a3"
+__version__ = "0.0.1b1"
 __author__ = "hlfzsi"
 
 try:

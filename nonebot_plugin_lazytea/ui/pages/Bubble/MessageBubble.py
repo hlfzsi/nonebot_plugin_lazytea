@@ -765,11 +765,10 @@ class MessageBubble(QFrame):
 
     def _show_detail_dialog(self):
         try:
-            # 重新处理Markdown以获取最新图片信息
             html = self._process_markdown()
             dialog = MessageDetailDialog(
                 html,
-                [],  # 不再需要网络图片信息
+                [], 
                 self.base_dir,
                 self
             )
