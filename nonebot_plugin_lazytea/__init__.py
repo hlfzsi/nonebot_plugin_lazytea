@@ -7,6 +7,7 @@ from importlib.resources import files, as_file
 
 from nonebot import get_driver, require
 require("nonebot_plugin_localstore")
+require("nonebot_plugin_session")
 from nonebot.drivers import ASGIMixin, WebSocket, WebSocketServerSetup, URL
 from nonebot.plugin import PluginMetadata
 

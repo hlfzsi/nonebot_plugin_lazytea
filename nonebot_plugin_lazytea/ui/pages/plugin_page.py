@@ -7,8 +7,7 @@ from PySide6.QtGui import (QColor, QPixmap,
 from PySide6.QtCore import Qt, QSize, Signal
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
                                QSizePolicy, QMenu, QGraphicsDropShadowEffect, QScrollArea,
-                               QMessageBox,  QGridLayout,
-                               QStackedWidget, QProgressDialog, QApplication)
+                               QGridLayout, QStackedWidget, QProgressDialog, QApplication)
 import webbrowser
 import re
 from .base_page import PageBase
