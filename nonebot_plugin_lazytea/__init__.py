@@ -1,3 +1,11 @@
+from .bridge import for_import as _
+from .ipc import server, Server
+from .utils.commute import server_send_queue
+from .utils.config import Config
+from .utils.config import _config as config
+from nonebot_plugin_session import __plugin_meta__ as sspm
+from nonebot.plugin import PluginMetadata
+from nonebot.drivers import ASGIMixin, WebSocket, WebSocketServerSetup, URL
 import asyncio
 import os
 from pathlib import Path
@@ -8,14 +16,7 @@ from importlib.resources import files, as_file
 from nonebot import get_driver, require
 require("nonebot_plugin_localstore")
 require("nonebot_plugin_session")
-from nonebot.drivers import ASGIMixin, WebSocket, WebSocketServerSetup, URL
-from nonebot.plugin import PluginMetadata
 
-from .utils.config import _config as config
-from .utils.config import Config
-from .utils.commute import server_send_queue
-from .ipc import server, Server
-from .bridge import for_import as _
 
 import nonebot_plugin_localstore    # noqa
 
@@ -47,6 +48,7 @@ __plugin_meta__ = PluginMetadata(
     type="application",
     homepage="https://github.com/hlfzsi/nonebot_plugin_lazytea",
     config=Config,
+    supported_adapters=sspm.supported_adapters,
 
     extra={
         "version": __version__,  # 用于在插件界面中显示版本与版本更新检查
