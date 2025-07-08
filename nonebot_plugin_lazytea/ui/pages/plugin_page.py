@@ -1,13 +1,11 @@
 import os
-import subprocess
-import sys
 from typing import Any, List, TypedDict, Optional, Dict
 from PySide6.QtGui import (QColor, QPixmap,
                            QFontDatabase)
 from PySide6.QtCore import Qt, QSize, Signal
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
                                QSizePolicy, QMenu, QGraphicsDropShadowEffect, QScrollArea,
-                               QGridLayout, QStackedWidget, QProgressDialog, QApplication)
+                               QGridLayout, QStackedWidget)
 import webbrowser
 import re
 from .base_page import PageBase
@@ -54,6 +52,7 @@ def format_plugin_name(name: str) -> str:
 class PluginCard(QFrame):
     """插件卡片"""
     success_signal = Signal(ResponsePayload)
+    update_signal = Signal(ResponsePayload)
 
     def __init__(self, plugin_data: PluginInfo, parent=None):
         super().__init__(parent)
@@ -61,6 +60,7 @@ class PluginCard(QFrame):
         self.latest_version = None
         self.icon_pixmap = None
         self.success_signal.connect(self._show_plugin_subpage)
+        self.update_signal.connect(self._handle_update)
         self._load_icon()
         self._init_style()
         self._init_ui()
@@ -333,8 +333,11 @@ class PluginCard(QFrame):
         version = self.latest_version
         index_url = os.getenv("PIP_INDEX_URL")
 
+        if version is None:
+            return
+
         title = "更新插件"
-        message = f"将更新插件 {formatted_name} 到 v{version}，请稍等..."
+        message = f"将更新插件 {formatted_name} 到 v{version.removeprefix("v")}，请确认执行操作.\n更新完成后将弹窗提醒."
 
         reply = MessageBoxBuilder().set_title(title).set_content(
             message).set_icon_type(MessageBoxConfig.IconType.NoIcon).add_button(
@@ -353,58 +356,40 @@ class PluginCard(QFrame):
         if reply != MessageBoxConfig.ButtonType.OK:
             return
 
-        pip_cmd = [
-            sys.executable, "-m", "pip", "install",
-            "--upgrade", f"{plugin_name}=={version}",
-            "-i", index_url
-        ]
+        talker.send_request(
+            "update_plugin", plugin_name=self.plugin_data["meta"].get("pip_name") or self.plugin_data["name"], success_signal=self.update_signal, error_signal=self.update_signal, timeout=600)
 
-        progress = QProgressDialog("正在更新插件，请稍候...", "", 0, 0, self)
-        progress.setCancelButton(None)  # 禁止取消
-        progress.setWindowTitle("更新中")
-        progress.setModal(True)
-        progress.show()
-        QApplication.processEvents()
+    def _handle_update(self, data: ResponsePayload):
+        if data.error:
+            returncode = 1
+        else:
+            returncode = 0
+        plugin_name = self.plugin_data['name']
+        formatted_name = format_plugin_name(plugin_name)
+        version = self.latest_version
+        if version is None:
+            return  # 安抚类型检查
 
-        try:
-            result = subprocess.run(
-                pip_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                encoding='utf-8',
-                errors='ignore'
-            )
-            progress.close()
+        if returncode == 0:
 
-            if result.returncode == 0:
-                MessageBoxBuilder().hide_icon().set_title("更新成功").set_content(
-                    f"插件 {formatted_name} 已成功更新到 {version}"
-                ).add_button(
-                    ButtonConfig(
-                        btn_type=MessageBoxConfig.ButtonType.OK,
-                        text="真是方便啊"
-                    )
-                ).build_and_fetch_result()
-            else:
-                error_message = result.stderr.strip() or result.stdout.strip() or "未知错误"
-                MessageBoxBuilder().hide_icon().set_title("更新失败惹").set_content(
-                    f"插件 {formatted_name} 更新失败:\n{error_message}"
-                ).add_button(
-                    ButtonConfig(
-                        btn_type=MessageBoxConfig.ButtonType.OK,
-                        text="可恶"
-                    )
-                ).build_and_fetch_result()
-        except Exception as e:
-            progress.close()
+            MessageBoxBuilder().hide_icon().set_title("更新成功").set_content(
+                f"插件 {formatted_name} 已成功更新到 v{version.removeprefix("v")}\n重启NoneBot以应用更新"
+            ).add_button(
+                ButtonConfig(
+                    btn_type=MessageBoxConfig.ButtonType.OK,
+                    text="真是方便啊"
+                )
+            ).build_and_fetch_result()
+        else:
+            error_message = data.error or "未知错误"
             MessageBoxBuilder().hide_icon().set_title("更新失败惹").set_content(
-                f"执行更新过程中出现异常：\n{str(e)}"
+                f"插件 {formatted_name} 更新失败:\n{error_message}"
             ).add_button(
                 ButtonConfig(
                     btn_type=MessageBoxConfig.ButtonType.OK,
                     text="可恶"
-                )).build_and_fetch_result()
+                )
+            ).build_and_fetch_result()
 
     def _on_homepage_clicked(self, homepage: str):
         """处理插件主页点击事件  直接在浏览器中打开"""

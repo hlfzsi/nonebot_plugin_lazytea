@@ -1,26 +1,26 @@
-from .bridge import for_import as _
-from .ipc import server, Server
-from .utils.commute import server_send_queue
-from .utils.config import Config
-from .utils.config import _config as config
-from nonebot_plugin_session import __plugin_meta__ as sspm
-from nonebot.plugin import PluginMetadata
-from nonebot.drivers import ASGIMixin, WebSocket, WebSocketServerSetup, URL
-import asyncio
-import os
-from pathlib import Path
-import sys
-import subprocess
-from importlib.resources import files, as_file
-
 from nonebot import get_driver, require
-require("nonebot_plugin_localstore")
-require("nonebot_plugin_session")
+require("nonebot_plugin_localstore")  # noqa
+require("nonebot_plugin_session")  # noqa
+
+
+from .bridge import for_import as _  # noqa
+from .ipc import server, Server  # noqa
+from .utils.commute import server_send_queue  # noqa
+from .utils.config import Config  # noqa
+from .utils.config import _config as config  # noqa
+from nonebot_plugin_session import __plugin_meta__ as sspm  # noqa
+from nonebot.plugin import PluginMetadata, inherit_supported_adapters  # noqa
+from nonebot.drivers import ASGIMixin, WebSocket, WebSocketServerSetup, URL  # noqa
+import asyncio  # noqa
+import os  # noqa
+from pathlib import Path  # noqa
+import sys  # noqa
+from importlib.resources import files, as_file  # noqa
 
 
 import nonebot_plugin_localstore    # noqa
 
-__version__ = "0.0.1b1"
+__version__ = "0.0.1b3"
 __author__ = "hlfzsi"
 
 try:
@@ -48,7 +48,8 @@ __plugin_meta__ = PluginMetadata(
     type="application",
     homepage="https://github.com/hlfzsi/nonebot_plugin_lazytea",
     config=Config,
-    supported_adapters=sspm.supported_adapters,
+    supported_adapters=inherit_supported_adapters(
+        "nonebot_plugin_session", "nonebot_plugin_localstore"),
 
     extra={
         "version": __version__,  # 用于在插件界面中显示版本与版本更新检查
@@ -60,6 +61,7 @@ __plugin_meta__ = PluginMetadata(
 
 driver = get_driver()
 ui_process = None
+send_task = None
 
 
 @driver.on_startup
@@ -74,31 +76,42 @@ async def pre():
                 handle_func=websocket_endpoint,
             )
         )
-    global ui_process
+    global ui_process, send_task
     script_dir = Path(__file__).parent.resolve()
     ui_env = os.environ.copy()
     ui_env["PORT"] = str(config.port)
     ui_env["TOKEN"] = str(config.get_token())
     ui_env["UIVERSION"] = __version__
     ui_env["UIAUTHOR"] = __author__
-    ui_env["PIP_INDEX_URL"] = str(config.pip_index_url)
-    ui_env["LOGLEVEL"] = config.log_level
+    ui_env["LOGLEVEL"] = str(config.log_level)
     ui_env["UIDATADIR"] = str(
         nonebot_plugin_localstore.get_data_dir("LazyTea"))
 
-    ui_process = subprocess.Popen(
-        [sys.executable, "-m", "ui.main_window"],
+    ui_process = await asyncio.create_subprocess_exec(
+        sys.executable, "-m", "ui.main_window",
         cwd=script_dir,
-        env=ui_env)
+        env=ui_env,
+    )
 
     async def send_data(server: Server, queue: asyncio.Queue):
-        while True:
-            type, data = await queue.get()
-            await server.broadcast(type, data)
-    asyncio.create_task(send_data(server, server_send_queue))
+        try:
+            while True:
+                type, data = await queue.get()
+                await server.broadcast(type, data)
+        except asyncio.CancelledError:
+            pass
+
+    send_task = asyncio.create_task(send_data(server, server_send_queue))
 
 
 @driver.on_shutdown
 async def cl():
-    if ui_process and ui_process.poll() is None:
-        ui_process.kill()
+    global send_task
+    if send_task:
+        send_task.cancel()
+
+    if ui_process:
+        try:
+            ui_process.kill()
+        except:
+            pass

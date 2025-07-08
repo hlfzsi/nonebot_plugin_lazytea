@@ -4,7 +4,7 @@ from typing import Dict, Optional, Set
 from nonebot.matcher import Matcher
 from nonebot.plugin import get_loaded_plugins
 from nonebot import get_bots, logger
-from nonebot_plugin_localstore import get_data_dir
+from nonebot_plugin_localstore import get_plugin_data_dir
 
 
 from .model import MatcherRuleModel, BotPlugins, PluginMatchers
@@ -34,7 +34,7 @@ class FuncTeller:
         - 权限配置(白名单/黑名单)
         """
         if cls.path is None:
-            cls.path = get_data_dir("LazyTea") / "perm.json"
+            cls.path = get_plugin_data_dir() / "perm.json"
 
         plugins = get_loaded_plugins()
         plugins = sorted(plugins, key=lambda plugin: plugin.name.lower())
@@ -54,7 +54,7 @@ class FuncTeller:
     async def save(cls, data: MatcherRuleModel) -> None:
         """保存数据到文件"""
         if cls.path is None:
-            cls.path = get_data_dir("LazyTea") / "perm.json"
+            cls.path = get_plugin_data_dir() / "perm.json"
 
         target_path = cls.path
         target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -69,7 +69,7 @@ class FuncTeller:
             加载的规则模型实例
         """
         if cls.path is None:
-            cls.path = get_data_dir("LazyTea") / "perm.json"
+            cls.path = get_plugin_data_dir() / "perm.json"
 
         target_path = cls.path
         try:

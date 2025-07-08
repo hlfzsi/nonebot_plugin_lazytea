@@ -4,6 +4,13 @@ from pydantic import BaseModel, Field, ValidationError
 import time
 
 
+def default(v):
+    try:
+        return str(v)
+    except:
+        return "不受支持的类型,请手动修改"
+
+
 class MessageHeader(BaseModel):
     """消息头部结构
     Example:
@@ -37,7 +44,7 @@ class ProtocolMessage:
             "header": header.model_dump(),
             "payload": payload
         }
-        return ujson.dumps(message) + cls.SEPARATOR
+        return ujson.dumps(message, default=default) + cls.SEPARATOR
 
     @classmethod
     def decode(cls, raw_data: str) -> Tuple[Optional[MessageHeader], Any]:

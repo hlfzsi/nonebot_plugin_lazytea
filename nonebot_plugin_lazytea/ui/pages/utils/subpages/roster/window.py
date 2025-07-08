@@ -104,6 +104,12 @@ class ReadableRoster:
 
     @staticmethod
     def _get_rule_display_name(rule_data: dict) -> str:
+
+        if rule_data.get("alconna_commands"):
+            cmds = rule_data["alconna_commands"]
+            if cmds:
+                return f"Alconna: {', '.join(cmds)}"
+
         if rule_data.get("commands"):
             cmds = rule_data["commands"]
             if cmds:
@@ -917,6 +923,14 @@ class PermissionConfigurator(QWidget):
         grid.setColumnStretch(1, 3)
 
         row = 0
+
+        if rule_data.get("alconna_commands"):
+            commands = rule_data["alconna_commands"]
+            if commands:
+                grid.addWidget(QLabel("Alconna 命令"), row, 0)
+                commands_label = RuleDetailLabel(", ".join(commands))
+                grid.addWidget(commands_label, row, 1)
+                row += 1
 
         if rule_data.get("commands"):
             commands = rule_data["commands"]

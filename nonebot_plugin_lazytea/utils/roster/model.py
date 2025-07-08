@@ -1,12 +1,27 @@
 from typing import Dict, Set, Tuple, Optional, FrozenSet, Any, List
 from pydantic import BaseModel, Field, field_validator, ConfigDict, field_serializer, model_serializer
 from nonebot.matcher import Matcher
+from nonebot import require, logger
 from nonebot.rule import (
     CommandRule, ShellCommandRule, RegexRule, KeywordsRule,
     StartswithRule, EndswithRule, FullmatchRule, IsTypeRule, ToMeRule
 )
 import ujson
 import xxhash
+
+enable_alc: bool = False
+try:
+    require("nonebot_plugin_alconna")
+    from nonebot_plugin_alconna.rule import AlconnaRule  # type: ignore
+except:
+    logger.info("未安装nonebot_plugin_alconna , 将在无alconna环境运行")
+
+    class AlconnaRule:
+        _path: str
+        def __init__(self, command: Any): ...
+else:
+    logger.success("已安装nonebot_plugin_alconna , 将在alconna环境运行")
+    enable_alc = True
 
 
 class RuleData(BaseModel):
@@ -19,6 +34,7 @@ class RuleData(BaseModel):
     startswith: FrozenSet[str] = Field(default_factory=frozenset)
     endswith: FrozenSet[str] = Field(default_factory=frozenset)
     fullmatch: FrozenSet[str] = Field(default_factory=frozenset)
+    alconna_commands: FrozenSet[str] = Field(default_factory=frozenset)
     event_types: FrozenSet[str] = Field(default_factory=frozenset)
     to_me: bool = False
 
@@ -28,7 +44,7 @@ class RuleData(BaseModel):
     def serialize_commands(self, value: FrozenSet[Tuple[str, ...]], _info) -> List[List[str]]:
         return [list(cmd) for cmd in value]
 
-    @field_serializer('regex_patterns', 'keywords', 'startswith', 'endswith', 'fullmatch', 'event_types')
+    @field_serializer('regex_patterns', 'keywords', 'startswith', 'endswith', 'fullmatch', 'event_types', 'alconna_commands')
     def serialize_frozenset(self, value: FrozenSet[str], _info) -> List[str]:
         return list(value)
 
@@ -53,6 +69,8 @@ class RuleData(BaseModel):
             all_data.append(full)
         for event_type in self.event_types:
             all_data.append(event_type)
+        for alc_cmd in self.alconna_commands:
+            all_data.append(alc_cmd)
         all_data.append(str(self.to_me))
 
         all_data.sort()
@@ -64,7 +82,7 @@ class RuleData(BaseModel):
 
     @field_validator(
         "commands", "shell_commands", "regex_patterns", "keywords",
-        "startswith", "endswith", "fullmatch", "event_types",
+        "startswith", "endswith", "fullmatch", "event_types", "alconna_commands",
         mode="before"
     )
     @classmethod
@@ -89,6 +107,7 @@ class RuleData(BaseModel):
         endswith = set()
         fullmatch = set()
         event_types = set()
+        alconna_commands = set()
         to_me = False
 
         for checker in matcher.rule.checkers:
@@ -115,6 +134,8 @@ class RuleData(BaseModel):
                 event_types.update(t.__name__ for t in rule_call.types)
             elif isinstance(rule_call, ToMeRule):
                 to_me = True
+            elif enable_alc and isinstance(rule_call, AlconnaRule):
+                alconna_commands.add(rule_call._path.removeprefix("Alconna::"))
 
         return cls(
             commands=commands,  # type: ignore
@@ -125,6 +146,7 @@ class RuleData(BaseModel):
             endswith=endswith,  # type: ignore
             fullmatch=fullmatch,  # type: ignore
             event_types=event_types,  # type: ignore
+            alconna_commands=alconna_commands,  # type: ignore
             to_me=to_me
         )
 

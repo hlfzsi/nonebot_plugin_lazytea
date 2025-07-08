@@ -187,7 +187,6 @@ class StyleManager:
                 background-color: #ffffff;
             }
             QCheckBox::indicator:checked {
-                image: url(:/icons/check.svg);
                 border: 2px solid #4dabf7;
             }
             QCheckBox::indicator:disabled {

@@ -2,6 +2,7 @@ import ast
 import hashlib
 import inspect
 from typing import Callable, Dict, Set
+import textwrap
 
 
 class CacheForFingerprint:
@@ -39,8 +40,10 @@ def get_function_fingerprint(plugin_name: str, func: Callable) -> str:
     try:
         if func in CacheForFingerprint.cache:
             return CacheForFingerprint.cache[func]
+
         source = inspect.getsource(func)
-        tree = ast.parse(source)
+        dedented_source = textwrap.dedent(source)
+        tree = ast.parse(dedented_source)
 
         if not isinstance(tree.body[0], (ast.FunctionDef, ast.AsyncFunctionDef)):
             raise ValueError("提供的对象不是函数定义")
@@ -54,5 +57,6 @@ def get_function_fingerprint(plugin_name: str, func: Callable) -> str:
         CacheForFingerprint.store(plugin_name, func, hash_final)
         return hash_final
 
-    except Exception as e:
-        raise ValueError(f"无法生成函数指纹: {str(e)}")
+    except Exception:
+        import traceback
+        raise ValueError(f"无法生成函数指纹: {traceback.format_exc()}")

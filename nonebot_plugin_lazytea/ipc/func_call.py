@@ -1,4 +1,5 @@
 import asyncio
+import sys
 import ujson
 from typing import Dict, Set, Type
 from pydantic import BaseModel, ValidationError
@@ -107,3 +108,46 @@ async def get_matchers():
 @server.register_handler("sync_matchers")
 async def sync_matchers(new_roster: str):
     await FuncTeller.sync(new_roster)
+
+
+@server.register_handler("update_plugin")
+async def update_plugin(plugin_name: str):
+
+    async def ensure_pip():
+        """确保当前 Python 环境有 pip"""
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, "-m", "ensurepip", "--upgrade",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await process.communicate()
+        return process.returncode == 0
+
+    if not await ensure_pip():
+        return {"error": "当前环境缺少 pip，尝试自动安装失败！请手动运行 python -m ensurepip --upgrade"}
+
+    pip_index_url = _config.pip_index_url
+
+    command = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--upgrade",
+        plugin_name,
+        "--index-url",
+        pip_index_url,
+    ]
+
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout, stderr = await process.communicate()
+
+    if process.returncode == 0:
+        return f"插件 {plugin_name} 更新成功！\n{stdout.decode()}"
+    else:
+        return {"error": f"插件 {plugin_name} 更新失败！\n{stderr.decode()}"}

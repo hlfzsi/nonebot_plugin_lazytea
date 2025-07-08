@@ -453,28 +453,35 @@ class MessagePage(PageBase):
 
             words = self.thu.cut(content)
 
-            important_pos = {'n': 4,    # 名词-权重4
-                             'v': 3,     # 动词-权重3
-                             'ws': 5,    # 专名-权重5
-                             'a': 2,     # 形容词-权重2
-                             'i': 1,    # 成语-权重1
-                             'l': 1}     # 习用语-权重1
+            important_pos = {'n': 4, 'v': 3, 'ws': 5, 'a': 2, 'i': 1, 'l': 1}
 
-            keywords_with_weight = []
+            # 使用字典记录最大权重
+            keywords_with_weight = {}
             for word, pos in words:
                 word = word.strip()
                 if pos in important_pos and word:
-                    weight = important_pos[pos] + len(word)/10
-                    keywords_with_weight.append((word, weight))
+                    weight = important_pos[pos] + len(word) / 10
+                    if word in keywords_with_weight:
+                        keywords_with_weight[word] = max(
+                            keywords_with_weight[word], weight)
+                    else:
+                        keywords_with_weight[word] = weight
 
             if not keywords_with_weight:
                 self.search_messages([content])
                 return
 
-            keywords_with_weight.sort(key=lambda x: x[1], reverse=True)
-
+            # 按权重排序
+            keywords_with_weight = sorted(
+                keywords_with_weight.items(), key=lambda x: x[1], reverse=True)
             top_keywords = [kw[0] for kw in keywords_with_weight[:5]]
 
+            if not all(top_keywords) or not top_keywords:
+                return
+
+            for keyword in top_keywords:
+                if not keyword.strip():
+                    return
             self.search_messages(top_keywords)
 
     def add_message(self, metadata: MetadataType, content: str,
@@ -527,12 +534,15 @@ class MessagePage(PageBase):
 
     def set_message(self, type_: str, data: Dict) -> None:
         """设置消息"""
-        bot = data['bot']
+        bot = data.get('bot', "")
         userid = data.get("userid") or bot
         timestamps = data["time"]
         content = ""
         plaintext = ""
         avatar = data.get("avatar")
+
+        if not bot and not content and not userid:
+            return
 
         # 构建元数据
         metadata = {
@@ -593,7 +603,7 @@ class MessagePage(PageBase):
                 self.add_message(metadata, content, BotToolKit.color.get(bot))
 
         # 保存到数据库
-        groupid = data["groupid"] or "私聊"
+        groupid = data.get("groupid") or "私聊"
         self.insert(type_, [userid, groupid, bot, timestamps, content,
                             metadata, plaintext])
 
