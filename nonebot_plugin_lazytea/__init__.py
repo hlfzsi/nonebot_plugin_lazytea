@@ -85,7 +85,7 @@ async def pre():
     ui_env["UIAUTHOR"] = __author__
     ui_env["LOGLEVEL"] = str(config.log_level)
     ui_env["UIDATADIR"] = str(
-        nonebot_plugin_localstore.get_data_dir("LazyTea"))
+        nonebot_plugin_localstore.get_plugin_data_dir())
 
     ui_process = await asyncio.create_subprocess_exec(
         sys.executable, "-m", "ui.main_window",
