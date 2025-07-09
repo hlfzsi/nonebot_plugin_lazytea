@@ -6,7 +6,7 @@ from nonebot.exception import IgnoredException
 from nonebot.internal.matcher import Matcher
 from nonebot.adapters import Bot, Event, Message
 from nonebot.message import event_preprocessor, run_preprocessor, run_postprocessor
-from nonebot_plugin_session import extract_session
+from nonebot_plugin_uninfo import Uninfo
 
 from .utils.commute import send_event
 from .utils.parse import get_function_fingerprint
@@ -109,37 +109,31 @@ class StandardizedMessageSegment:
 
 
 @event_preprocessor
-async def reocrd_event(bot: Bot, event: Event):
+async def reocrd_event(bot: Bot, event: Event, session: Uninfo):
     type = event.get_type()
     if type == "message":
 
-        session = extract_session(bot, event)
-        group_id = session.id2
-        user_id = session.id1
+        group_id = session.scene.id
+        user_id = session.user.id
+        avatar = session.user.avatar
 
         data = {
             "bot": bot.self_id,
             "content": StandardizedMessageSegment.to_standardized_list(event.get_message()),
             "userid": user_id,
-            "session": f"{f"群聊: {group_id}" if group_id is not None else "私信"} | 用户: {user_id}",
-            "avatar": getattr(event, "avatar") or (f"http://q1.qlogo.cn/g?b=qq&nk={user_id}&s=100" if bot.adapter in ("OneBot V11", "OneBot V12") else ""),
+            "session": f"{f"群聊: {group_id}" if group_id is not None else "私信"} | 用户: {session.user.nick} / {user_id}",
+            "avatar": avatar,
             "groupid": group_id,
             "time": int(time.time())
         }
-    else:
-        data = {
-            "bot": bot.self_id,
-            "time": int(time.time())
-        }
 
-    await send_event(type, data)
+        await send_event(type, data)
 
 
 @run_preprocessor
-async def run_pre(bot: Bot, event: Event, matcher: Matcher, state: T_State):
-    session = extract_session(bot, event)
-    group_id = session.id2
-    user_id = session.id1 or ""
+async def run_pre(bot: Bot, matcher: Matcher, state: T_State, session: Uninfo):
+    group_id = session.scene.id
+    user_id = session.user.id
     plugin_name = matcher.plugin_name or "Unknown"
 
     current_rule = RuleData.extract_rule(matcher)
@@ -155,14 +149,13 @@ async def run_pre(bot: Bot, event: Event, matcher: Matcher, state: T_State):
 
 
 @run_postprocessor
-async def run_post(bot: Bot, event: Event, matcher: Matcher, exception: Optional[Exception], state: T_State):
+async def run_post(bot: Bot, matcher: Matcher, exception: Optional[Exception], state: T_State, session: Uninfo):
     try:
         current_time = time.time()
         plugin_name = matcher.plugin_name or "Unknown"
         time_costed = current_time-state[f"UI{plugin_name}{hash(matcher)}"]
-        session = extract_session(bot, event)
-        group_id = session.id2
-        user_id = session.id1
+        group_id = session.scene.id
+        user_id = session.user.id
 
         special = [i.call for i in matcher.handlers]
         special = [get_function_fingerprint(plugin_name, i) for i in special]
@@ -194,14 +187,15 @@ async def handle_api_call(bot: Bot, api: str, data: Dict[str, Any]):
             "groupid": data.get("group_id", "私聊"),
             "time": int(time.time())
         }
+        await send_event("call_api", data_to_send)
 
-    else:
-        data_to_send = {
-            "api": api,
-            "bot": bot.self_id,
-            "time": int(time.time())
-        }
-    await send_event("call_api", data_to_send)
+    # else:
+    #    data_to_send = {
+    #        "api": api,
+    #        "bot": bot.self_id,
+    #        "time": int(time.time())
+    #    }
+    # await send_event("call_api", data_to_send)
 
 
 @driver.on_bot_connect

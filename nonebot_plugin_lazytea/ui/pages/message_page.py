@@ -1,6 +1,6 @@
 import time
 import ujson
-import thulac
+import jieba.posseg as pseg
 from typing import Dict, List, Literal, Optional, Tuple
 
 from PySide6.QtCore import Qt, QTimer, QPoint, Signal
@@ -93,7 +93,6 @@ class MessagePage(PageBase):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self._auto_scroll = True
-        self.thu = thulac.thulac(filt=True)
         # 状态枚举: 显示中、隐藏、搜索中、加载更早消息、进入页面拉取消息
         self.state: Literal["on_show", "hidden", "searching",
                             "loading_earlier", "loading"] = "hidden"
@@ -138,14 +137,12 @@ class MessagePage(PageBase):
             return
 
         if self.earliest_loaded_id is None:
-            # 如果还没有加载任何消息，则不执行加载更早消息的操作
             return
 
         self.state = "loading_earlier"
         signal = AsyncQuerySignal()
         signal.finished.connect(self._handle_earlier_messages)
 
-        # 修改查询以确保正确的时间顺序
         get_database().execute_async(
             """
             SELECT id, meta, content, bot, timestamps 
@@ -171,16 +168,14 @@ class MessagePage(PageBase):
             return
 
         # 更新最早时间戳和ID
-        new_earliest_id = results[-1][0]  # 使用最后一条消息的ID
+        new_earliest_id = results[-1][0]
         self.earliest_loaded_id = new_earliest_id
 
-        # 保存当前滚动位置和可视区域顶部项
         scrollbar = self.list_widget.verticalScrollBar()
         current_scroll = scrollbar.value()
         first_visible_item = self.list_widget.itemAt(0, 0)
 
-        # 添加新消息到顶部
-        for _, meta, content, bot, _ in results:
+        for _, meta, content, bot, _ in reversed(results):
             meta = ujson.loads(meta)
             item = QListWidgetItem()
             bubble = MessageBubble(meta, content,
@@ -189,7 +184,6 @@ class MessagePage(PageBase):
             self.list_widget.insertItem(0, item)
             self.list_widget.setItemWidget(item, bubble)
 
-        # 等待布局更新
         QTimer.singleShot(100, lambda: self._adjust_scroll_position(
             current_scroll, first_visible_item, len(results)))
         self.state = "on_show"
@@ -199,7 +193,6 @@ class MessagePage(PageBase):
         if not first_visible_item:
             return
 
-        # 计算新增消息的总高度
         total_height = 0
         for i in range(added_count):
             item = self.list_widget.item(i)
@@ -207,15 +200,27 @@ class MessagePage(PageBase):
                 total_height += self.list_widget.visualItemRect(
                     item).height() + self.list_widget.spacing()
 
-        # 设置新的滚动条位置，保持视觉连续性
         scrollbar = self.list_widget.verticalScrollBar()
-        new_scroll_position = previous_position + total_height
-        scrollbar.setValue(new_scroll_position)
-
-        # 确保原来的顶部项仍然可见
         if first_visible_item and self.list_widget.row(first_visible_item) >= 0:
             self.list_widget.scrollToItem(
                 first_visible_item, QListWidget.ScrollHint.PositionAtTop)
+        else:
+            new_scroll_position = previous_position + total_height
+            scrollbar.setValue(new_scroll_position)
+
+    def _clear_message_list(self):
+        """
+        清空消息列表。
+        必须手动遍历并使用 deleteLater() 删除。
+        """
+        while self.list_widget.count() > 0:
+            item = self.list_widget.takeItem(0)
+            widget = self.list_widget.itemWidget(item)
+            if widget:
+                if isinstance(widget, MessageBubble):
+                    widget.cleanup()
+                widget.deleteLater()
+        self.list_widget.clear()
 
     def search_messages(self, keywords: List[str]):
         """搜索消息"""
@@ -224,7 +229,7 @@ class MessagePage(PageBase):
 
         self.search_keywords = keywords
         self.state = "searching"
-        self.list_widget.clear()
+        self._clear_message_list()
 
         self._add_search_bar(keywords)
 
@@ -291,7 +296,7 @@ class MessagePage(PageBase):
             self.state = "on_show"
             return
 
-        self.list_widget.clear()
+        self._clear_message_list()
         for meta, content, bot in results:
             meta = ujson.loads(meta)
             self.add_message(meta, content, BotToolKit.color.get(bot))
@@ -304,7 +309,7 @@ class MessagePage(PageBase):
             self.search_bar = None
 
         self.search_keywords = []
-        self.list_widget.clear()
+        self._clear_message_list()
         self.state = "on_show"
         self.earliest_loaded_ts = None
         self.earliest_loaded_id = None
@@ -451,37 +456,39 @@ class MessagePage(PageBase):
             widget: MessageBubble
             content = widget.content.toPlainText()
 
-            words = self.thu.cut(content)
+            words = pseg.cut(content)
+
+            pos_mapping = {
+                'n': 'n', 'vn': 'v', 'v': 'v', 'a': 'a', 'i': 'i', 'l': 'i',
+                'j': 'ws', 'nr': 'ws', 'ns': 'ws', 'nt': 'ws', 'nz': 'ws',
+            }
 
             important_pos = {'n': 4, 'v': 3, 'ws': 5, 'a': 2, 'i': 1, 'l': 1}
-
-            # 使用字典记录最大权重
             keywords_with_weight = {}
-            for word, pos in words:
+
+            for word, flag in words:
+                mapped_pos = pos_mapping.get(flag)
+                if not mapped_pos:
+                    continue
                 word = word.strip()
-                if pos in important_pos and word:
-                    weight = important_pos[pos] + len(word) / 10
-                    if word in keywords_with_weight:
-                        keywords_with_weight[word] = max(
-                            keywords_with_weight[word], weight)
-                    else:
-                        keywords_with_weight[word] = weight
+                if not word:
+                    continue
+
+                weight = important_pos[mapped_pos] + len(word) / 10
+                keywords_with_weight[word] = max(
+                    keywords_with_weight.get(word, 0), weight)
 
             if not keywords_with_weight:
                 self.search_messages([content])
                 return
 
-            # 按权重排序
-            keywords_with_weight = sorted(
+            sorted_keywords = sorted(
                 keywords_with_weight.items(), key=lambda x: x[1], reverse=True)
-            top_keywords = [kw[0] for kw in keywords_with_weight[:5]]
+            top_keywords = [kw[0] for kw in sorted_keywords[:5]]
 
-            if not all(top_keywords) or not top_keywords:
+            if not top_keywords or not all(kw.strip() for kw in top_keywords):
                 return
 
-            for keyword in top_keywords:
-                if not keyword.strip():
-                    return
             self.search_messages(top_keywords)
 
     def add_message(self, metadata: MetadataType, content: str,
@@ -510,14 +517,21 @@ class MessagePage(PageBase):
 
     def _safe_add_row(self, metadata: MetadataType, content: str,
                       accent_color: str) -> None:
-        """安全添加消息行"""
-        # 在自动滚动模式下才限制消息数量
+        """安全添加消息行，并正确处理旧消息的销毁"""
+
         if self._auto_scroll:
+
             while self.list_widget.count() >= self.MAX_AUTO_SCROLL_MESSAGES:
-                oldest_item = self.list_widget.takeItem(0)
-                if oldest_widget := self.list_widget.itemWidget(oldest_item):
-                    if isinstance(oldest_widget, MessageBubble):
-                        oldest_widget.cleanup()
+
+                item_to_remove = self.list_widget.item(0)
+                widget_to_remove = self.list_widget.itemWidget(item_to_remove)
+
+                if widget_to_remove:
+                    if isinstance(widget_to_remove, MessageBubble):
+                        widget_to_remove.cleanup()
+                    widget_to_remove.deleteLater()
+
+                self.list_widget.takeItem(0)
 
         item = QListWidgetItem()
         bubble = MessageBubble(metadata, content, accent_color,
@@ -541,33 +555,19 @@ class MessagePage(PageBase):
         plaintext = ""
         avatar = data.get("avatar")
 
-        if not bot and not content and not userid:
-            return
-
-        # 构建元数据
         metadata = {
-            "bot": (
-                bot,
-                "color: {bot_color}; font-weight: bold;",
-            ),
-            "time": (
-                timestamps,
-                "color: #757575; font-size: 12px;",
-            ),
-            "session": (
-                f"会话：{data.get('session', "")}",
-                "color: #616161; font-style: italic;",
-            ),
+            "bot": ("bot", "color: {bot_color}; font-weight: bold;"),
+            "time": (timestamps, "color: #757575; font-size: 12px;"),
+            "session": (f"会话：{data.get('session', '')}", "color: #616161; font-style: italic;"),
             "avatar": (avatar, MessageBubble.AvatarPosition.LEFT_OUTSIDE),
             "timestamps": (timestamps, "hidden")
         }
+        metadata["bot"] = (bot, metadata["bot"][1])
 
-        # 根据消息类型处理
         if type_ == "message":
             BotToolKit.counter.add_event(bot, "receive")
             segments = data.get("content", [])
-            content_parts = []
-            plaintext_parts = []
+            content_parts, plaintext_parts = [], []
             for seg_type, seg_data in segments:
                 if seg_type == "text":
                     content_parts.append(seg_data.replace(
@@ -575,8 +575,10 @@ class MessagePage(PageBase):
                     plaintext_parts.append(seg_data)
                 else:
                     content_parts.append(seg_data)
-            content = "".join(content_parts)
-            plaintext = "".join(plaintext_parts)
+            content, plaintext = "".join(
+                content_parts), "".join(plaintext_parts)
+            if not content:
+                return
 
         elif type_ == "call_api":
             api = data["api"]
@@ -592,20 +594,18 @@ class MessagePage(PageBase):
                         plaintext_parts.append(seg_data)
                     else:
                         content_parts.append(seg_data)
-                content = "".join(content_parts)
-                plaintext = "".join(plaintext_parts)
+                content, plaintext = "".join(
+                    content_parts), "".join(plaintext_parts)
 
-        # 根据状态处理消息
         if self.state == "on_show":
             self.add_message(metadata, content, BotToolKit.color.get(bot))
         elif self.state == "searching":
             if all(kw.lower() in plaintext.lower() for kw in self.search_keywords):
                 self.add_message(metadata, content, BotToolKit.color.get(bot))
 
-        # 保存到数据库
         groupid = data.get("groupid") or "私聊"
-        self.insert(type_, [userid, groupid, bot, timestamps, content,
-                            metadata, plaintext])
+        self.insert(type_, [userid, groupid, bot,
+                    timestamps, content, metadata, plaintext])
 
     def insert(self, type_: str, params: List):
         """插入消息到数据库"""
@@ -643,22 +643,19 @@ class MessagePage(PageBase):
         """处理最近消息的加载结果"""
         if error:
             return
-
         if not results:
             return
 
-        # 更新时间戳和ID范围
         ids = [r[0] for r in results]
         self.earliest_loaded_id = min(ids)
 
-        # 显示消息
         for msg_id, meta, content, bot, _ in reversed(results):
             meta = ujson.loads(meta)
             self.add_message(meta, content, BotToolKit.color.get(bot))
 
     def on_enter(self):
         """进入页面时调用"""
-        self.list_widget.clear()
+        self._clear_message_list()
         self.state = "on_show"
         self.earliest_loaded_id = None
         self.reached_earliest = False
@@ -667,7 +664,7 @@ class MessagePage(PageBase):
     def on_leave(self):
         """离开页面时调用"""
         self.state = "hidden"
-        self.list_widget.clear()
+        self._clear_message_list()
         if self.search_bar:
             self.main_layout.removeWidget(self.search_bar)
             self.search_bar.deleteLater()

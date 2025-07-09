@@ -331,13 +331,12 @@ class PluginCard(QFrame):
         plugin_name = self.plugin_data['name']
         formatted_name = format_plugin_name(plugin_name)
         version = self.latest_version
-        index_url = os.getenv("PIP_INDEX_URL")
 
         if version is None:
             return
 
         title = "更新插件"
-        message = f"将更新插件 {formatted_name} 到 v{version.removeprefix("v")}，请确认执行操作.\n更新完成后将弹窗提醒."
+        message = f"将更新插件 {formatted_name} 到 v{version.removeprefix("v")}，请确认执行操作.\n更新完成后将弹窗提醒.\n请不要切换页面"
 
         reply = MessageBoxBuilder().set_title(title).set_content(
             message).set_icon_type(MessageBoxConfig.IconType.NoIcon).add_button(

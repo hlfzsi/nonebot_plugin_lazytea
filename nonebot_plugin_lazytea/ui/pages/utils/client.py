@@ -228,15 +228,21 @@ class MessageHandler(QObject):
         request_info["timer"].deleteLater()
 
         response = ResponsePayload(**payload)
+        try:
+            if error := payload.get("error"):
+                if error_signal := request_info["error_signal"]:
+                    error_signal.emit(response)
+                else:
+                    raise ValueError(
+                        f"An Exception occurred while processing {error}")
+            elif success_signal := request_info["success_signal"]:
+                success_signal.emit(response)
 
-        if error := payload.get("error"):
-            if error_signal := request_info["error_signal"]:
-                error_signal.emit(response)
+        except RuntimeError as e:
+            if "deleted" in str(e).lower():
+                pass
             else:
-                raise ValueError(
-                    f"An Exception occurred while processing {error}")
-        elif success_signal := request_info["success_signal"]:
-            success_signal.emit(response)
+                raise e
 
     def subscribe(self, *types: str, signal: SignalInstance) -> None:
         """订阅指定类型的消息,返回类型和负载(str,dict)"""

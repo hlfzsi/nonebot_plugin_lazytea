@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Literal
+from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 from nonebot import get_plugin_config, get_driver
 
@@ -11,6 +11,7 @@ class Config(BaseModel):
 
     pip_index_url: str = Field(
         "https://pypi.tuna.tsinghua.edu.cn/simple", description="更新地址")
+
 
     @property
     def environment(self):

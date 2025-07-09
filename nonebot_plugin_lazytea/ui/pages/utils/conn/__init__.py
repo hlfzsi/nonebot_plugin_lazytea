@@ -39,21 +39,21 @@ def init_db():
         CREATE VIRTUAL TABLE IF NOT EXISTS message_for_fts USING fts5(plaintext);
     """, for_write=True)
 
-    # 创建触发器：当向 Message 插入新记录时，同步到 FTS 表（调用 thulac 函数分词）
+    # 创建触发器：当向 Message 插入新记录时，同步到 FTS 表（调用 cut 函数分词）
     pool.execute_async("""
         CREATE TRIGGER IF NOT EXISTS trigger_message_insert AFTER INSERT ON Message
         BEGIN
             INSERT INTO message_for_fts(rowid, plaintext)
-            VALUES (NEW.id, thulac(NEW.plaintext));
+            VALUES (NEW.id, cut(NEW.plaintext));
         END;
     """, for_write=True)
 
-    # 创建触发器：当更新 Message 记录时，同步更新 FTS 表（调用 thulac 函数分词）
+    # 创建触发器：当更新 Message 记录时，同步更新 FTS 表（调用 cut 函数分词）
     pool.execute_async("""
         CREATE TRIGGER IF NOT EXISTS trigger_message_update AFTER UPDATE ON Message
         BEGIN
             UPDATE message_for_fts
-            SET plaintext = thulac(NEW.plaintext)
+            SET plaintext = cut(NEW.plaintext)
             WHERE rowid = NEW.id;
         END;
     """, for_write=True)

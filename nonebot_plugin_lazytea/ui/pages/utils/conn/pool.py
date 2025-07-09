@@ -6,7 +6,7 @@ from PySide6.QtCore import QObject, QTimer, Signal, QMutex, QMutexLocker, QThrea
 from collections import defaultdict, deque
 from typing import Dict, List, Optional, Tuple, Any, Union, Sequence
 
-import thulac
+import jieba
 
 from ..tealog import logger
 
@@ -113,29 +113,25 @@ class WriteWorker(QThread):
         self.condition = QWaitCondition()
         self.running = True
         self.conn: Optional[apsw.Connection] = None
-        self.thulac_tokenizer: Optional[thulac.thulac] = None
 
-    def register_thulac_tokenizer(self):
+    def register_jieba_tokenizer(self):
         """注册自定义分词器到数据库连接"""
         try:
-            if not self.thulac_tokenizer:
-                self.thulac_tokenizer = thulac.thulac(
-                    seg_only=True, T2S=True, filt=True)
-
-            def thulac_tokenize(*args):
+            def jieba_tokenize(*args):
                 if not args or not args[0]:
                     return ""
                 text = str(args[0])
-                words = self.thulac_tokenizer.cut(  # type: ignore
-                    text, text=True).split()  # type: ignore
-                return " ".join(word.strip() for word in words if word.strip())
 
-            # 注册为自定义函数
-            self.conn.createscalarfunction(     # type: ignore
-                "thulac", thulac_tokenize)
-            logger.info("THULAC分词器注册成功")
+                words = jieba.cut(text, cut_all=False)
+
+                filtered_words = (word.strip() for word in words)
+                return " ".join(word for word in filtered_words if word)
+
+            self.conn.createscalarfunction(  # type: ignore
+                "cut", jieba_tokenize)
+            logger.info("jieba分词器注册成功")
         except Exception as e:
-            logger.error(f"注册THULAC分词器失败: {e}")
+            logger.error(f"注册jieba分词器失败: {e}")
 
     def run(self):
         """工作线程主循环"""
@@ -145,7 +141,7 @@ class WriteWorker(QThread):
             self.conn = apsw.Connection(self.db_path)
 
             # 注册自定义分词器
-            self.register_thulac_tokenizer()
+            self.register_jieba_tokenizer()
 
             while True:
                 with QMutexLocker(self.mutex):

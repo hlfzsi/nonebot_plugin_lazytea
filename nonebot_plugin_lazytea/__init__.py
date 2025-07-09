@@ -1,6 +1,6 @@
 from nonebot import get_driver, require
+require("nonebot_plugin_uninfo")  # noqa
 require("nonebot_plugin_localstore")  # noqa
-require("nonebot_plugin_session")  # noqa
 
 
 from .bridge import for_import as _  # noqa
@@ -8,7 +8,6 @@ from .ipc import server, Server  # noqa
 from .utils.commute import server_send_queue  # noqa
 from .utils.config import Config  # noqa
 from .utils.config import _config as config  # noqa
-from nonebot_plugin_session import __plugin_meta__ as sspm  # noqa
 from nonebot.plugin import PluginMetadata, inherit_supported_adapters  # noqa
 from nonebot.drivers import ASGIMixin, WebSocket, WebSocketServerSetup, URL  # noqa
 import asyncio  # noqa
@@ -20,7 +19,7 @@ from importlib.resources import files, as_file  # noqa
 
 import nonebot_plugin_localstore    # noqa
 
-__version__ = "0.0.1b3"
+__version__ = "0.0.1b4"
 __author__ = "hlfzsi"
 
 try:
@@ -49,7 +48,7 @@ __plugin_meta__ = PluginMetadata(
     homepage="https://github.com/hlfzsi/nonebot_plugin_lazytea",
     config=Config,
     supported_adapters=inherit_supported_adapters(
-        "nonebot_plugin_session", "nonebot_plugin_localstore"),
+        "nonebot_plugin_uninfo", "nonebot_plugin_localstore"),
 
     extra={
         "version": __version__,  # 用于在插件界面中显示版本与版本更新检查
