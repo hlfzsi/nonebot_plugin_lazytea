@@ -50,7 +50,7 @@ __plugin_meta__ = PluginMetadata(
     homepage="https://github.com/hlfzsi/nonebot_plugin_lazytea",
     config=Config,
     supported_adapters=inherit_supported_adapters(
-        "nonebot_plugin_uninfo", "nonebot_plugin_localstore"),
+        "nonebot_plugin_uninfo", "nonebot_plugin_localstore", "nonebot_plugin_alconna"),
 
     extra={
         "version": __version__,  # 用于在插件界面中显示版本与版本更新检查
