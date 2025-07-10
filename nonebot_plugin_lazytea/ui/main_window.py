@@ -19,6 +19,7 @@ from PySide6.QtCore import (
 )
 from .pages import OverviewPage, BotInfoPage, MessagePage, PageBase, PluginPage
 from .pages.background.plugin_recorder import Recorder
+from .pages.background.quit import StdinListener
 from .pages.utils.client import talker
 from .pages.utils.tealog import logger
 from .pages.utils.conn import init_db, get_database
@@ -234,7 +235,7 @@ class MainWindow(QWidget):
     ICON_NAMES: ClassVar[List[str]] = ["📊", "🤖", "📨", "🔌"]  # "⚙️"
     DECORATION_IMAGE: ClassVar[str] = "https://t.alcy.cc/mp"
 
-    def __init__(self, icon: QIcon) -> None:
+    def __init__(self, icon: QIcon, app: QGuiApplication) -> None:
         super().__init__()
         self.app_icon = icon
         self.setWindowFlags(
@@ -247,7 +248,7 @@ class MainWindow(QWidget):
         self.init_ui()
         self.setWindowTitle("TEEEA")
         self.setup_tray()
-        self.resize_to_screen_ratio(0.619)
+        self.resize_to_screen_ratio(0.618)
         self.setup_styles()
         self.stack.setObjectName("mainStack")
 
@@ -260,7 +261,7 @@ class MainWindow(QWidget):
         self.bg_decoration.setScaledContents(True)
         self.bg_decoration.lower()
 
-        self.overlay_stacks: Dict[int, List[QWidget]] = {}
+        self.overlay_stacks: Dict[int, List['OverlayContainer']] = {}
         self.current_overlay = None
 
         self.load_decoration_image()
@@ -268,6 +269,23 @@ class MainWindow(QWidget):
         talker.start()
         QTimer.singleShot(0, init_db)
         QTimer.singleShot(50, lambda: Recorder(parent=self))
+        StdinListener.get_instance().start()
+        StdinListener.get_instance().shutdown_requested.connect(app.quit)
+        app.aboutToQuit.connect(self.cleanup_overlay)
+        app.aboutToQuit.connect(talker.stop)
+
+    def cleanup_overlay(self):
+        for page_index in list(self.overlay_stacks.keys()):
+            stack = self.overlay_stacks.pop(page_index, [])
+            for overlay in stack:
+                if hasattr(overlay.content_widget, 'cleanup') and callable(getattr(overlay.content_widget, 'cleanup')):
+                    try:
+                        overlay.content_widget.cleanup()  # type: ignore
+                    except Exception as e:
+                        logger.error(f"清理覆盖层内容时出错: {e}")
+                overlay.deleteLater()
+        self.current_overlay = None
+        logger.info("成功清理覆盖层")
 
     def setup_tray(self) -> None:
         """设置系统托盘"""
@@ -579,16 +597,12 @@ class MainWindow(QWidget):
         control_layout.addStretch()
 
         self.min_btn = self.create_control_button("−", "#FFB6C1")
-        self.max_btn = self.create_control_button("□", "#87CEFA")
         self.close_btn = self.create_control_button("×", "#FF69B4")
 
-        self.min_btn.clicked.connect(self.showMinimized)
-        self.max_btn.clicked.connect(self.toggle_maximize)
-        # self.close_btn.clicked.disconnect()
-        self.close_btn.clicked.connect(self.close)
+        self.min_btn.clicked.connect(self.close)
+        self.close_btn.clicked.connect(self.quit_app)
 
         control_layout.addWidget(self.min_btn)
-        control_layout.addWidget(self.max_btn)
         control_layout.addWidget(self.close_btn)
         return control_widget
 
@@ -618,15 +632,6 @@ class MainWindow(QWidget):
         """)
         return btn
 
-    def toggle_maximize(self):
-        if self.isMaximized():
-            self.showNormal()
-            self.max_btn.setText("□")
-        else:
-            self.showMaximized()
-            self.max_btn.setText("🗖")
-        self.update_mask()
-
     def paintEvent(self, event):
         if not self.isVisible():
             return
@@ -642,12 +647,6 @@ class MainWindow(QWidget):
             path = QPainterPath()
             path.addRoundedRect(QRectF(target_rect),  15.0, 15.0)
             painter.fillPath(path,  QColor(255, 255, 255, 255))
-
-            shadow_path = QPainterPath()
-            shadow_rect = target_rect.adjusted(-5,  -5, 5, 5)
-            shadow_path.addRoundedRect(QRectF(shadow_rect),  15.0, 15.0)
-            shadow_region = shadow_path.subtracted(path)
-            painter.fillPath(shadow_region,  QColor(0, 0, 0, 30))
         except:
             import traceback
             traceback.print_exc()
@@ -795,6 +794,7 @@ class OverlayContainer(QWidget):
                  main_window: MainWindow, parent: QWidget):
         super().__init__(parent)
         self.main_window = main_window
+        self.content_widget = content_widget
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
 
         # 统一设置所有元素的背景色
@@ -822,7 +822,6 @@ class OverlayContainer(QWidget):
         back_btn.setObjectName("backButton")
         back_btn.setFixedSize(80, 32)
         back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        back_btn.clicked.connect(self.main_window.close_overlay)
         back_btn.setStyleSheet("""
             #backButton {
                 font-size: 13px;
@@ -839,15 +838,14 @@ class OverlayContainer(QWidget):
                 background: #ebebeb;
             }
         """)
+        back_btn.clicked.connect(self.close_and_cleanup)
 
-        # 主标题和提示信息容器 - 强制白色背景
         title_container = QWidget(title_bar)
         title_container.setObjectName("titleContainer")
         title_layout = QHBoxLayout(title_container)
         title_layout.setContentsMargins(0, 0, 0, 0)
         title_layout.setSpacing(10)
 
-        # 主标题 - 背景继承自容器
         title_label = QLabel(title, title_container)
         title_label.setObjectName("titleLabel")
         title_label.setStyleSheet("""
@@ -858,7 +856,6 @@ class OverlayContainer(QWidget):
             }
         """)
 
-        # 提示信息 - 背景继承自容器
         hint_label = QLabel("建议仅对您充分理解的参数进行调整", title_container)
         hint_label.setObjectName("hintLabel")
         hint_label.setStyleSheet("""
@@ -874,22 +871,19 @@ class OverlayContainer(QWidget):
         title_layout.addWidget(hint_label)
         title_layout.addStretch()
 
-        # 分隔线 - 颜色与整体协调
         separator = QFrame(title_bar)
         separator.setFrameShape(QFrame.Shape.VLine)
         separator.setFrameShadow(QFrame.Shadow.Sunken)
         separator.setStyleSheet("border-color: #e0e0e0;")
         separator.setFixedHeight(20)
 
-        # 标题栏布局 - 确保完全覆盖
         title_bar_layout = QHBoxLayout(title_bar)
         title_bar_layout.setContentsMargins(20, 0, 20, 0)
         title_bar_layout.setSpacing(15)
         title_bar_layout.addWidget(back_btn)
         title_bar_layout.addWidget(separator)
-        title_bar_layout.addWidget(title_container, 1)  # 添加伸缩因子确保填充
+        title_bar_layout.addWidget(title_container, 1)
 
-        # 内容区域 - 使用稍浅但协调的背景色
         content_container = QWidget(self)
         content_container.setObjectName("contentContainer")
         content_container.setStyleSheet("""
@@ -899,7 +893,6 @@ class OverlayContainer(QWidget):
             }
         """)
 
-        # 确保内容区域不会影响标题栏颜色
         content_layout = QVBoxLayout(content_container)
         content_layout.setContentsMargins(20, 20, 20, 20)
         content_layout.setSpacing(0)
@@ -912,7 +905,6 @@ class OverlayContainer(QWidget):
         main_layout.addWidget(title_bar)
         main_layout.addWidget(content_container)
 
-        # 淡入动画效果
         self.opacity_effect = QGraphicsOpacityEffect(self)
         self.setGraphicsEffect(self.opacity_effect)
         self.opacity_effect.setOpacity(0)
@@ -924,7 +916,6 @@ class OverlayContainer(QWidget):
         self.animation.setEasingCurve(QEasingCurve.Type.OutQuad)
         self.animation.start()
 
-        # 微妙的阴影效果
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(15)
         shadow.setColor(QColor(0, 0, 0, 20))
@@ -936,6 +927,11 @@ class OverlayContainer(QWidget):
         parent = self.parent()
         if isinstance(parent, QWidget):
             self.resize(parent.size())
+
+    def close_and_cleanup(self):
+        if hasattr(self.content_widget, 'cleanup') and callable(getattr(self.content_widget, 'cleanup')):
+            self.content_widget.cleanup()  # type: ignore
+        self.main_window.close_overlay()
 
 
 def run(*args: Any, **kwargs: Any) -> None:
@@ -974,7 +970,7 @@ def run(*args: Any, **kwargs: Any) -> None:
             icon = create_icon_from_unicode("🍵")
 
         try:
-            window = MainWindow(icon)
+            window = MainWindow(icon, app)
             window.show()
         except Exception as e:
             import traceback
@@ -983,13 +979,13 @@ def run(*args: Any, **kwargs: Any) -> None:
             sys.exit(1)
 
         app.aboutToQuit.connect(get_database().shutdown)
-
-        app.exec()
+        try:
+            app.exec()
+        except KeyboardInterrupt:
+            app.quit()
 
     try:
         main(*args, **kwargs)
-    except KeyboardInterrupt:
-        sys.exit(0)
     except Exception as e:
         import traceback
         logger.error("❌ 程序发生未处理异常：")

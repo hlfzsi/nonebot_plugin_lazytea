@@ -38,12 +38,15 @@ class WebSocketWorker(QRunnable):
                         try:
                             message = websocket.recv()
                             self._handle_message(message)  # type: ignore
-                        except ConnectionClosed:
+                        except (ConnectionClosed, ConnectionRefusedError):
+                            self.stop_event.set()
                             break
 
             except Exception as e:
+                import traceback
+                traceback.print_exc()
                 self.signals.error.emit(str(e))
-                time.sleep(5)
+                break
 
     def _handle_message(self, raw_data: str):
         if ProtocolMessage.SEPARATOR in raw_data:
@@ -76,7 +79,7 @@ class HeartbeatWorker(QRunnable):
                     self.client.send_raw_message(message)
                 except Exception as e:
                     logger.error(f"Heartbeat error: {e}")
-            time.sleep(5)
+            self.stop_event.wait(5)
 
 
 class WebSocketClient:
@@ -99,7 +102,7 @@ class WebSocketClient:
     def _setup_signals(self):
         self.ws_worker.signals.message_received.connect(
             self._on_message_received)
-        self.ws_worker.signals.error.connect(lambda e: logger.error(e))
+        self.ws_worker.signals.error.connect(lambda e: ...)
         self.ws_worker.signals.connection_state.connect(
             self._on_connection_state)
 
@@ -132,6 +135,18 @@ class WebSocketClient:
                 logger.warning("Send failed, connection closed")
                 return False
         return False
+
+    def stop(self):
+        self.ws_worker.stop_event.set()
+        self.heartbeat_worker.stop_event.set()
+
+        if self.ws:
+            try:
+                self.ws.close()
+            except Exception as e:
+                logger.warning(f"关闭 websocket 时发生错误: {e}")
+
+        self.connected = False
 
 
 class RequestDict(TypedDict):
@@ -250,6 +265,23 @@ class MessageHandler(QObject):
             raise ValueError("At least one type required")
         for type_ in types:
             self.signal_dict[type_].append(signal)
+
+    def stop(self) -> None:
+        self.client.stop()
+
+        for msg_id, request_info in list(self._pending_requests.items()):
+            request_info["timer"].stop()
+            request_info["timer"].deleteLater()
+
+            if error_signal := request_info.get("error_signal"):
+                try:
+                    error_signal.emit(
+                        "Client is shutting down. Request cancelled.")
+                except RuntimeError:
+                    pass
+
+        self._pending_requests.clear()
+        logger.info("ws会话关闭")
 
 
 # 全局实例

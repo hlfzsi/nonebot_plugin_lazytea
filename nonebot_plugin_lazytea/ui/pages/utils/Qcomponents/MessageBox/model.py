@@ -64,6 +64,7 @@ class ButtonConfig(BaseModel):
         fixed_size (Optional[QSize]): 固定尺寸 
         min_width (Optional[int]): 最小宽度 
         max_width (Optional[int]): 最大宽度 
+        closes_dialog (bool): 点击此按钮后是否关闭对话框
     """
     btn_type: MessageBoxConfig.ButtonType
     text: str
@@ -76,6 +77,7 @@ class ButtonConfig(BaseModel):
     fixed_size: Optional[QSize] = None
     min_width: Optional[int] = None
     max_width: Optional[int] = None
+    closes_dialog: bool = True
     
     model_config = {'arbitrary_types_allowed': True}
 

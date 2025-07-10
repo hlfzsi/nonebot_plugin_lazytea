@@ -752,7 +752,6 @@ class MessageBubble(QFrame):
             content_height = self.content.height()
             total_height = header_height + content_height + margins.top() + margins.bottom()
             self.list_item.setSizeHint(QSize(0, total_height + 8))
-            self.list_widget.doItemsLayout()
         except Exception as e:
             logger.error(f"Update item height error: {str(e)}")
 

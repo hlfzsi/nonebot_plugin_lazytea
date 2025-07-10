@@ -38,6 +38,7 @@ class MessageBoxConfigType(TypedDict):
     text_color: str
     corner_radius: int
     icon_bg_color: Optional[str]
+    custom_widget: Optional[QWidget]
 
 
 class AnimatedButton(QPushButton):
@@ -310,6 +311,7 @@ class MessageBoxBuilder:
         "text_color": "#2D3748",  # 文本颜色
         "corner_radius": 12,  # 圆角半径
         "icon_bg_color": None,  # 图标背景色
+        "custom_widget": None,
     }
 
     def __init__(self):
@@ -403,7 +405,8 @@ class MessageBoxBuilder:
             else self._config["click_mode"],
             fixed_size=config.fixed_size,
             min_width=config.min_width,
-            max_width=config.max_width
+            max_width=config.max_width,
+            closes_dialog=config.closes_dialog
         )
         self._buttons.append(merged_config)
 
@@ -645,10 +648,23 @@ class MessageBoxBuilder:
             self.dialog.close()
             return False
 
+    def add_custom_widget(self, widget: QWidget) -> 'MessageBoxBuilder':
+        """
+        在消息内容和按钮之间添加一个自定义的QWidget。
+
+        Args:
+            widget (QWidget): 要添加的自定义控件。
+
+        Returns:
+            MessageBoxBuilder: 建造者实例以支持链式调用。
+        """
+        self._config["custom_widget"] = widget
+        return self
+
 
 class ModernMessageBox(QDialog):
     """
-    现代化消息对话框主类 
+    消息对话框主类 
 
     Signals:
         buttonClicked(object): 当按钮点击时发射信号 
@@ -716,6 +732,9 @@ class ModernMessageBox(QDialog):
         self.text_area.setReadOnly(True)
         self.text_area.setFrameShape(QTextEdit.Shape.NoFrame)
         content_layout.addWidget(self.text_area)
+
+        if self._config["custom_widget"]:
+            content_layout.addWidget(self._config["custom_widget"])
 
         self.button_container = QWidget()
         content_layout.addWidget(self.button_container)
@@ -785,6 +804,11 @@ class ModernMessageBox(QDialog):
     def _setup_content(self) -> None:
         """设置内容文本"""
         content = self._config["content"]
+        if not content:
+            self.text_area.setVisible(False)
+            return
+
+        self.text_area.setVisible(True)
         if self._config["use_html"]:
             self.text_area.setHtml(content)
         else:
@@ -864,10 +888,15 @@ class ModernMessageBox(QDialog):
         )
         self._result = result
         self.buttonClicked.emit(result)
-        if self.isModal():
-            self.accept()
-        else:
-            self.close()
+
+        if config.closes_dialog:
+            for btn in self.findChildren(AnimatedButton):
+                btn.cleanup()
+
+            if self.isModal():
+                self.accept()
+            else:
+                self.close()
 
     def new_exec_(self) -> Optional[MessageBoxConfig.ButtonType | Any]:
         """执行模态对话框并返回结果"""
@@ -879,6 +908,12 @@ class ModernMessageBox(QDialog):
         super().show()
         self.raise_()
         self.activateWindow()
+
+    def closeEvent(self, event):
+        """确保在关闭时清理所有动画按钮资源"""
+        for button in self.findChildren(AnimatedButton):
+            button.cleanup()
+        super().closeEvent(event)
 
 
 # 使用示例

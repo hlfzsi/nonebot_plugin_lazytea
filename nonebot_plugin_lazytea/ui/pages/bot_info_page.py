@@ -492,7 +492,7 @@ class BotInfoPage(PageBase):
                 self.set_bot_status(bot_id, False)
 
     def on_enter(self):
-        self.data_timer.start(1000)
+        self.data_timer.start(10000)
 
     def on_leave(self):
         self.data_timer.stop()

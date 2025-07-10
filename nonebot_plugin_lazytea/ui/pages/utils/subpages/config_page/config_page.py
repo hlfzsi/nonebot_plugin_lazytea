@@ -476,6 +476,9 @@ class ConfigEditor(QWidget):
 
     def __init__(self, schema: Dict, data_model_dump: Dict, moudle_name: str):
         super().__init__()
+        self.validation_timer = QTimer(self)
+        self.validation_timer.setSingleShot(True)
+        self.validation_timer.setInterval(100)
         self.model_cls = self._generate_model(schema)
         self.initial_data = data_model_dump
         self.moudle_name = moudle_name
@@ -588,10 +591,6 @@ class ConfigEditor(QWidget):
         widget_layout.setContentsMargins(0, 0, 0, 0)
         widget_layout.setSpacing(5)
 
-        self.validation_timer = QTimer()
-        self.validation_timer.setSingleShot(True)
-        self.validation_timer.setInterval(100)
-
         error_label = QLabel()
         error_label.setProperty("class", "error-label")
         StyleManager.apply_style(error_label)
@@ -624,9 +623,13 @@ class ConfigEditor(QWidget):
             }
 
         def schedule_validation():
-            self.validation_timer.start()
+            try:
+                self.validation_timer.timeout.disconnect()
+            except RuntimeError: 
+                pass
             self.validation_timer.timeout.connect(
                 lambda: self._validate_field(field_name))
+            self.validation_timer.start()
 
         if hasattr(widget, "valueChanged"):
             widget.valueChanged.connect(schedule_validation)  # type: ignore
@@ -765,3 +768,7 @@ class ConfigEditor(QWidget):
     def _validate_all(self) -> bool:
         valid = all(self._validate_field(name) for name in self.widgets)
         return valid
+    
+    def cleanup(self):
+        if self.validation_timer.isActive():
+            self.validation_timer.stop()

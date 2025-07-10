@@ -1,13 +1,19 @@
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 from nonebot import get_driver, logger
 from nonebot.typing import T_State
 from nonebot.exception import IgnoredException
 from nonebot.internal.matcher import Matcher
-from nonebot.adapters import Bot, Event, Message
+from nonebot.adapters import Bot, Event
 from nonebot.message import event_preprocessor, run_preprocessor, run_postprocessor
+from nonebot_plugin_alconna import UniMessage, Segment
+from nonebot_plugin_alconna.uniseg.segment import (
+    Text, At, AtAll, Emoji,
+    Image, Audio, Voice, Video, File,
+    Reply, Reference,
+    Hyper, Button, Keyboard, Other, I18n
+)
 from nonebot_plugin_uninfo import Uninfo
-
 from .utils.commute import send_event
 from .utils.parse import get_function_fingerprint
 from .utils.roster import FuncTeller, RuleData
@@ -15,97 +21,148 @@ from .utils.roster import FuncTeller, RuleData
 driver = get_driver()
 
 
-_CONVERTERS: Dict[str, Callable[..., str]] = {
-    "text": lambda data: data.get("text", ""),
-    "face": lambda data: f"QQ表情[id={data.get('id', '')}]",
-    "image": lambda data: data.get("url", data.get("file", "")),
-    "record": lambda data: data.get("url", data.get("file", "")),
-    "video": lambda data: data.get("url", data.get("file", "")),
-    "at": lambda data: "全体成员" if data.get("qq") == "all" else f"@{data.get('qq', '')}",
-    "rps": lambda _: "rps",
-    "dice": lambda _: "dice",
-    "shake": lambda _: "shake",
-    "anonymous": lambda _: "anonymous",
-    "poke": lambda data: f"{data.get('name', '')}[type={data.get('type', '')},id={data.get('id', '')}]",
-    "share": lambda data: f"{data.get('title', '')} | {data.get('url', '')}",
-    "contact": lambda data: f"推荐{data.get('type', '')}:{data.get('id', '')}",
-    "location": lambda data: data.get("title", "") or f"位置({data.get('lat', '')},{data.get('lon', '')})",
-    "music": lambda data: f"自定义音乐:{data['title']}" if data.get("type") == "custom" else f"音乐[{data.get('type', '')}]:{data.get('id', '')}",
-    "reply": lambda data: f"回复:{data.get('id', '')}",
-    "forward": lambda data: f"合并转发:{data.get('id', '')}",
-    "node": lambda data: f"转发节点:{data['id']}" if "id" in data else f"{data.get('nickname', '')}({data.get('user_id', '')}): {StandardizedMessageSegment._parse_node_content(data.get('content', ''))}",
-    "xml": lambda _: "[XML数据]",
-    "json": lambda _: "[JSON数据]",
-    "markdown": lambda data: data,
-}
+class UniMessageMarkdownConverter:
+    """
+    一个将 UniMessage 对象转换为 Markdown 字符串的转换器。
 
+    使用方法:
+    converter = UniMessageMarkdownConverter()
+    markdown_list = converter.convert(uni_message_object)  # 返回 (消息类型, md字符串) 的列表
+    """
 
-class StandardizedMessageSegment:
-    __slots__ = ("type", "data")
-
-    @staticmethod
-    def to_standardized_list(message: Message) -> List[Tuple[str, str]]:
-        return [
-            (
-                msg.get("type"),
-                StandardizedMessageSegment.to_markdown(
-                    msg.get("type"), _CONVERTERS.get(msg.get("type"), lambda d: str(d))(msg.get("data"))),
-            )
-            for msg in message
-        ]
-
-    def __init__(self, msg_type: str, data: Union[str, Dict]):
-        self.type = msg_type
-        self.data = _CONVERTERS.get(msg_type, lambda d: str(d))(data)
-
-    @staticmethod
-    def _parse_node_content(content: Union[str, list]) -> str:
-        """节点内容解析"""
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            return " ".join(
-                seg["data"] if isinstance(seg.get("data"), str)
-                else _CONVERTERS.get(seg["type"], str)(seg.get("data", {}))
-                for seg in content
-            )
-        return ""
-
-    @staticmethod
-    def to_markdown(type: str, data: str) -> str:
-        handlers = {
-            "text": lambda: data.replace("\n", "  \n"),
-            "at": lambda: f"**@{data}**",
-            "image": lambda: f"![图片]({data})",
-            "face": lambda: f"`{data}`",
-            "record": lambda: "`[语音]`",
-            "video": lambda: "`[视频]`",
-            "rps": lambda: "`[猜拳]`",
-            "dice": lambda: "`[掷骰子]`",
-            "shake": lambda: "`[窗口抖动]`",
-            "poke": lambda: f"`[戳一戳:{data}]`",
-            "share": lambda: f"[{parts[0]}]({parts[1]})" if (parts := data.split(" | ", 1)) and len(parts) > 1 else data,
-            "contact": lambda: f"`{data}`",
-            "location": lambda: f"`📍{data}`",
-            "music": lambda: f"`🎵{data}`",
-            "reply": lambda: "`↩️回复消息`",
-            "forward": lambda: "`📨合并转发`",
-            "node": lambda: f"`{data}`",
+    def __init__(self):
+        self._handlers: Dict[Type[Segment], Callable[[Any], str]] = {
+            Text: self._handle_text,
+            At: self._handle_at,
+            AtAll: self._handle_at_all,
+            Emoji: self._handle_emoji,
+            Image: self._handle_image,
+            Voice: self._handle_media,
+            Audio: self._handle_media,
+            Video: self._handle_media,
+            File: self._handle_media,
+            Reply: self._handle_reply,
+            Reference: self._handle_reference,
+            Hyper: self._handle_hyper,
+            Keyboard: self._handle_keyboard,
+            Button: self._handle_button,
+            I18n: self._handle_i18n,
+            Other: self._handle_other,
         }
 
-        if handler := handlers.get(type):
-            return handler()
+    def convert(self, message: UniMessage) -> List[Tuple[str, str]]:
+        """
+        将 UniMessage 转换为 (消息类型, Markdown字符串) 的列表
 
-        if type in {"xml", "json"}:
-            return f"`{data}`"
+        Args:
+            message: UniMessage 对象
 
-        return f"`[未知类型:{type}]`"
+        Returns:
+            包含元组的列表，每个元组格式为 (消息类型, 转换后的Markdown字符串)
+        """
+        if not message:
+            return []
 
-    def serialize(self) -> Tuple[str, str]:
-        return (self.type, self.data)
+        result = []
+        for segment in message:
+            seg_type = type(segment).__name__
+            handler = self._handlers.get(type(segment), self._handle_default)
+            md_str = handler(segment)
+            result.append((seg_type, md_str))
 
-    def __repr__(self):
-        return f"StandardizedMessageSegment(type={self.type!r}, data={self.data!r})"
+        return result
+
+    def _handle_default(self, seg: Segment) -> str:
+        return f"[{seg.__class__.__name__}]"
+
+    def _handle_text(self, seg: Text) -> str:
+        text = seg.text.replace("\n", "  \n")
+        if not seg.styles:
+            return text
+
+        style_map = {"bold": "**", "italic": "*",
+                     "strikethrough": "~~", "spoiler": "||", "code": "`"}
+
+        sorted_styles = sorted(
+            seg.styles.items(), key=lambda x: (x[0][0], -x[0][1]))
+        parts = list(text)
+        for (start, end), styles in reversed(sorted_styles):
+            prefix, suffix = "", ""
+            for style_name in styles:
+                if mark := style_map.get(style_name):
+                    prefix += mark
+                    suffix = mark + suffix
+            if prefix:
+                parts.insert(end, suffix)
+                parts.insert(start, prefix)
+
+        return "".join(parts)
+
+    def _handle_at(self, seg: At) -> str:
+        return f"**@{seg.display or seg.target}**"
+
+    def _handle_at_all(self, seg: AtAll) -> str:
+        return "**@全体成员**" if not seg.here else "**@在线成员**"
+
+    def _handle_emoji(self, seg: Emoji) -> str:
+        return f"[表情:{seg.name or seg.id}]"
+
+    def _handle_image(self, seg: Image) -> str:
+        alt_text = seg.name if seg.name != seg.__default_name__ else "图片"
+        url = seg.url or seg.path or ""
+        return f"![{alt_text}]({url})"
+
+    def _handle_media(self, seg: Union[Voice, Audio, Video, File]) -> str:
+        type_map = {Voice: "语音", Audio: "音频", Video: "视频", File: "文件"}
+        seg_type = type(seg)
+        type_name = type_map.get(seg_type, "媒体")
+
+        if seg_type is File and seg.name != seg.__default_name__:
+            return f"[{type_name}: {seg.name}]"
+
+        if seg.url:
+            return f"[{type_name}]({seg.url})"
+
+        return f"[{type_name}]"
+
+    def _handle_reply(self, seg: Reply) -> str:
+        return f"↩️ [回复给: {seg.id}] "
+
+    def _handle_reference(self, seg: Reference) -> str:
+        count = len(seg.children)
+        return f"📨 [合并转发 (共 {count} 条)]"
+
+    def _handle_hyper(self, seg: Hyper) -> str:
+        return f"[卡片消息: {seg.format.upper()}]"
+
+    def _handle_button(self, seg: Button) -> str:
+        label = seg.label.text if isinstance(
+            seg.label, Text) else str(seg.label)
+        flag_map = {
+            "action": f"操作:{seg.id}", "link": f"链接:{seg.url}",
+            "input": f"输入:{seg.text}", "enter": f"发送:{seg.text}",
+        }
+        return f"`{label}` ({flag_map.get(seg.flag, '未知')})"
+
+    def _handle_keyboard(self, seg: Keyboard) -> str:
+        if not seg.children:
+            return "[按钮组]"
+
+        buttons_md = "\n".join(
+            f"- {self._handle_button(btn)}" for btn in seg.children)
+        return f"\n> **按钮组**\n{buttons_md}"
+
+    def _handle_other(self, seg: Other) -> str:
+        return f"[未知类型: {seg.origin.type}]"
+
+    def _handle_i18n(self, seg: I18n) -> str:
+        try:
+            return str(seg)
+        except Exception as e:
+            return f"[i18n: {seg.item.scope}.{seg.item.type} error: {e}]"
+
+
+markdown_converter = UniMessageMarkdownConverter()
 
 
 @event_preprocessor
@@ -116,12 +173,15 @@ async def reocrd_event(bot: Bot, event: Event, session: Uninfo):
         group_id = session.scene.id
         user_id = session.user.id
         avatar = session.user.avatar
+        message = event.get_message()
+        unimsg = UniMessage.of(message, bot, bot.adapter.get_name())
+        content_md = markdown_converter.convert(unimsg)
 
         data = {
             "bot": bot.self_id,
-            "content": StandardizedMessageSegment.to_standardized_list(event.get_message()),
+            "content": content_md,
             "userid": user_id,
-            "session": f"{f"群聊: {group_id}" if group_id is not None else "私信"} | 用户: {session.user.nick} / {user_id}",
+            "session": f"{f"群聊: {group_id}" if group_id is not None else "私信"} | 用户: {session.user.nick or ""} / {user_id}",
             "avatar": avatar,
             "groupid": group_id,
             "time": int(time.time())
@@ -179,9 +239,11 @@ async def run_post(bot: Bot, matcher: Matcher, exception: Optional[Exception], s
 @Bot.on_calling_api
 async def handle_api_call(bot: Bot, api: str, data: Dict[str, Any]):
     if api == "send_msg":
+        message_to_send = UniMessage.of(data["message"])
+        content_md = markdown_converter.convert(message_to_send)
         data_to_send = {
             "api": api,
-            "content": StandardizedMessageSegment.to_standardized_list(data["message"]),
+            "content": content_md,
             "bot": bot.self_id,
             "session": f"{data.get("group_id", "私聊")}-{data.get("user_id", "未知")}",
             "groupid": data.get("group_id", "私聊"),

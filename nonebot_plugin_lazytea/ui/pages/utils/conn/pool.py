@@ -154,6 +154,8 @@ class WriteWorker(QThread):
                     self.active_queue, self.pending_queue = self.pending_queue, self.active_queue
 
                 while self.active_queue:
+                    if not self.running:
+                        break
                     task: WriteTask = self.active_queue.popleft()
                     try:
                         cursor = self.conn.cursor()
@@ -231,12 +233,6 @@ class SQLiteConnectionPool(QObject):
         self.back_buffer: Dict[str, List[Tuple]] = defaultdict(list)
         self.buffer_mutex = QMutex()
         self.buffer_swap_mutex = QMutex()
-
-        # 定时任务
-        self.maintenance_timer = QTimer(self)
-        self.maintenance_timer.setInterval(10000)
-        self.maintenance_timer.timeout.connect(self._perform_maintenance)
-        self.maintenance_timer.start()
 
         # 缓冲刷新定时器
         self.buffer_timer = QTimer(self)
@@ -345,64 +341,6 @@ class SQLiteConnectionPool(QObject):
                 self.connection_released.emit()
                 self.condition.wakeOne()
 
-    def _perform_maintenance(self):
-        """执行连接池维护任务 - 优化锁作用域"""
-        now = time.monotonic()
-        connections_to_remove = []
-        new_connections = []
-
-        # 第一阶段：收集需要处理的连接（非关键部分不加锁）
-        with QMutexLocker(self.pool_mutex):
-            # 创建临时空闲连接列表
-            temp_idle = deque()
-            while self._idle_connections:
-                conn: ConnectionWrapper = self._idle_connections.popleft()
-                if (now - conn.last_used) > self.idle_timeout and len(self._all_connections) > self.min_pool_size:
-                    logger.debug(f"关闭空闲连接 (空闲时间: {now - conn.last_used:.1f}s)")
-                    connections_to_remove.append(conn)
-                else:
-                    temp_idle.append(conn)
-
-            # 检查所有连接的健康状态
-            for conn in list(self._all_connections):
-                if not conn.in_use and not conn.ping():
-                    logger.warning("移除失效连接")
-                    connections_to_remove.append(conn)
-
-            # 确保最小连接数
-            needed = self.min_pool_size - \
-                (len(temp_idle) + len(self._in_use_connections))
-            while needed > 0:
-                try:
-                    conn = self._create_connection()
-                    new_connections.append(conn)
-                    needed -= 1
-                except apsw.Error as e:
-                    logger.error(f"无法创建新连接: {e}")
-                    break
-
-            # 应用更改
-            self._idle_connections = temp_idle
-
-            # 添加新连接
-            for conn in new_connections:
-                self._all_connections.append(conn)
-                self._idle_connections.append(conn)
-
-            # 移除无效连接
-            for conn in connections_to_remove:
-                if conn in self._all_connections:
-                    self._all_connections.remove(conn)
-                if conn in self._idle_connections:
-                    self._idle_connections.remove(conn)
-
-        # 在锁外关闭连接
-        for conn in connections_to_remove:
-            try:
-                conn.close()
-            except:
-                pass
-
     def executelater(self, sql: str, params: Union[tuple, list]):
         """延迟提交方法"""
         with QMutexLocker(self.buffer_mutex):
@@ -503,7 +441,6 @@ class SQLiteConnectionPool(QObject):
 
     def shutdown(self):
         """关闭连接池"""
-        self.maintenance_timer.stop()
         self.buffer_timer.stop()
 
         self.flush()

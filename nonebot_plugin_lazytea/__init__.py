@@ -1,6 +1,8 @@
-from nonebot import get_driver, require
+import subprocess
+from nonebot import get_driver, logger, require
 require("nonebot_plugin_uninfo")  # noqa
 require("nonebot_plugin_localstore")  # noqa
+require("nonebot_plugin_alconna")  # noqa
 
 
 from .bridge import for_import as _  # noqa
@@ -86,10 +88,18 @@ async def pre():
     ui_env["UIDATADIR"] = str(
         nonebot_plugin_localstore.get_plugin_data_dir())
 
+    creation_flags = {}
+    if sys.platform == "win32":
+        creation_flags['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        creation_flags['start_new_session'] = True
+
     ui_process = await asyncio.create_subprocess_exec(
         sys.executable, "-m", "ui.main_window",
         cwd=script_dir,
         env=ui_env,
+        stdin=asyncio.subprocess.PIPE,
+        **creation_flags
     )
 
     async def send_data(server: Server, queue: asyncio.Queue):
@@ -105,12 +115,27 @@ async def pre():
 
 @driver.on_shutdown
 async def cl():
-    global send_task
+    global send_task, ui_process
     if send_task:
         send_task.cancel()
 
     if ui_process:
+
+        if ui_process.stdin and ui_process.returncode is None:
+            try:
+                ui_process.stdin.write(b"shutdown\n")
+                await ui_process.stdin.drain()
+                ui_process.stdin.close()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
         try:
+            await asyncio.wait_for(ui_process.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+
+            logger.warning("UI 进程未能及时退出，将强制终止。")
             ui_process.kill()
-        except:
-            pass
+            await ui_process.wait()
+
+    ui_process = None
+    send_task = None

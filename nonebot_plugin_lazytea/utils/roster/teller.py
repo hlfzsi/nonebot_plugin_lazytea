@@ -85,7 +85,7 @@ class FuncTeller:
 
     @classmethod
     async def init_model(cls) -> MatcherRuleModel:
-        """初始化规则模型（修正版）"""
+        """初始化规则模型"""
         file_data = await cls.load()
         current_data = cls.get_matchers()
         merged_data = MatcherRuleModel()

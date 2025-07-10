@@ -1,31 +1,17 @@
 from typing import Dict, Set, Tuple, Optional, FrozenSet, Any, List
 from pydantic import BaseModel, Field, field_validator, ConfigDict, field_serializer, model_serializer
 from nonebot.matcher import Matcher
-from nonebot import require, logger
 from nonebot.rule import (
     CommandRule, ShellCommandRule, RegexRule, KeywordsRule,
     StartswithRule, EndswithRule, FullmatchRule, IsTypeRule, ToMeRule
 )
+from nonebot_plugin_alconna.rule import AlconnaRule
 import ujson
 import xxhash
 
-enable_alc: bool = False
-try:
-    require("nonebot_plugin_alconna")
-    from nonebot_plugin_alconna.rule import AlconnaRule  # type: ignore
-except:
-    logger.info("未安装nonebot_plugin_alconna , 将在无alconna环境运行")
-
-    class AlconnaRule:
-        _path: str
-        def __init__(self, command: Any): ...
-else:
-    logger.success("已安装nonebot_plugin_alconna , 将在alconna环境运行")
-    enable_alc = True
-
 
 class RuleData(BaseModel):
-    """规则数据模型，支持序列化和高性能比较"""
+    """规则数据模型，支持序列化和比较"""
     commands: FrozenSet[Tuple[str, ...]] = Field(default_factory=frozenset)
     shell_commands: FrozenSet[Tuple[str, ...]
                               ] = Field(default_factory=frozenset)
@@ -134,7 +120,7 @@ class RuleData(BaseModel):
                 event_types.update(t.__name__ for t in rule_call.types)
             elif isinstance(rule_call, ToMeRule):
                 to_me = True
-            elif enable_alc and isinstance(rule_call, AlconnaRule):
+            elif isinstance(rule_call, AlconnaRule):
                 alconna_commands.add(rule_call._path.removeprefix("Alconna::"))
 
         return cls(
