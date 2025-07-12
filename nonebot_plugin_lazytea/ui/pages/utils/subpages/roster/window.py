@@ -551,7 +551,7 @@ class PermissionConfigurator(QWidget):
                 return
 
             is_allowed = ReadableRoster.check(
-                bot_id, plugin_name, matcher_key, userid, groupid)
+                bot_id, plugin_name, matcher_key, userid, groupid)  
             if is_allowed:
                 result_label.setText("✅  权限检查通过: 允许访问")
                 result_label.setStyleSheet(

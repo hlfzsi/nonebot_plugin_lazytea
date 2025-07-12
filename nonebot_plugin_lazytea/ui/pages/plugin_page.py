@@ -395,6 +395,13 @@ class PluginCard(QFrame):
         logger.debug(f"开始处理主页点击事件，主页地址：{homepage}")
         webbrowser.open(homepage)
 
+    def cleanup(self):
+        try:
+            self.success_signal.disconnect()
+            self.update_signal.disconnect()
+        except RuntimeError:
+            pass
+
 
 class PluginPage(PageBase):
     """插件管理页面"""
@@ -579,6 +586,7 @@ class PluginPage(PageBase):
     def _clear_plugins(self):
         """清除已加载的插件卡片"""
         for card in self.plugin_cards:
+            card.cleanup()
             self.card_layout.removeWidget(card)
             card.deleteLater()
         self.plugin_cards.clear()

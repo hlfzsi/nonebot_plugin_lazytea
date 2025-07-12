@@ -56,7 +56,7 @@ class BubbleNetworkManager(QObject):
 class ReleaseNetworkManager(QObject):
     # (request_type, response_data, plugin_name)
     request_finished = Signal(str, dict, str)
-    _execute_request = Signal(str, str, str)  # 新增信号，用于主线程执行请求
+    _execute_request = Signal(str, str, str)
 
     _instance = None
     _lock = threading.Lock()

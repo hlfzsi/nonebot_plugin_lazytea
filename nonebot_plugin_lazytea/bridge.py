@@ -14,6 +14,7 @@ from nonebot_plugin_alconna.uniseg.segment import (
     Hyper, Button, Keyboard, Other, I18n
 )
 from nonebot_plugin_uninfo import Uninfo
+from nonebot_plugin_uninfo.adapters import alter_get_fetcher
 from .utils.commute import send_event
 from .utils.parse import get_function_fingerprint
 from .utils.roster import FuncTeller, RuleData
@@ -65,7 +66,7 @@ class UniMessageMarkdownConverter:
 
         result = []
         for segment in message:
-            seg_type = type(segment).__name__
+            seg_type = type(segment).__name__.lower()
             handler = self._handlers.get(type(segment), self._handle_default)
             md_str = handler(segment)
             result.append((seg_type, md_str))
@@ -222,6 +223,8 @@ async def run_post(bot: Bot, matcher: Matcher, exception: Optional[Exception], s
 
         data = {
             "bot": bot.self_id,
+            "platform": session.scope,
+            "adapter": session.adapter,
             "time_costed": time_costed,
             "time": int(current_time),
             "groupid": group_id,
@@ -238,6 +241,7 @@ async def run_post(bot: Bot, matcher: Matcher, exception: Optional[Exception], s
 
 @Bot.on_calling_api
 async def handle_api_call(bot: Bot, api: str, data: Dict[str, Any]):
+    # 实验性支持，目前已知支持ob11
     if api == "send_msg":
         message_to_send = UniMessage.of(data["message"])
         content_md = markdown_converter.convert(message_to_send)
@@ -262,9 +266,16 @@ async def handle_api_call(bot: Bot, api: str, data: Dict[str, Any]):
 
 @driver.on_bot_connect
 async def track_connect(bot: Bot):
+    basefetcher = alter_get_fetcher(bot.adapter.get_name())
+    if not basefetcher:
+        logger.warning(f"不受支持的适配器{bot.adapter.get_name()}")
+        return
+    baseinfo = basefetcher.supply_self(bot)
+
     data = {
-        "bot": bot.self_id,
-        "adapter": bot.adapter.get_name(),
+        "bot": baseinfo["self_id"],
+        "adapter": baseinfo["adapter"],
+        "platform": baseinfo["scope"],
         "time": int(time.time())
     }
     await send_event("bot_connect", data)
@@ -272,9 +283,16 @@ async def track_connect(bot: Bot):
 
 @driver.on_bot_disconnect
 async def track_disconnect(bot: Bot):
+    basefetcher = alter_get_fetcher(bot.adapter.get_name())
+    if not basefetcher:
+        logger.warning(f"不受支持的适配器{bot.adapter.get_name()}")
+        return
+    baseinfo = basefetcher.supply_self(bot)
+
     data = {
-        "bot": bot.self_id,
-        "adapter": bot.adapter.get_name(),
+        "bot": baseinfo["self_id"],
+        "adapter": baseinfo["adapter"],
+        "platform": baseinfo["scope"],
         "time": int(time.time())
     }
     await send_event("bot_disconnect", data)

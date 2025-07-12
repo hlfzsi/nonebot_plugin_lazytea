@@ -10,6 +10,7 @@ from PySide6.QtGui import (QColor, QPainter, QBrush, QPainterPath,
 from .base_page import PageBase
 from .utils.BotTools import BotToolKit
 from .utils.subpages.roster import PermissionConfigurator
+from .utils.subpages.datan import PluginStatsViewer
 from .utils.client import talker, ResponsePayload
 
 
@@ -18,10 +19,11 @@ class BotCard(QFrame):
     status_changed = Signal(bool)
     matcher_signal = Signal(ResponsePayload)
 
-    def __init__(self, bot_id: str, adapter_name: str, parent=None):
+    def __init__(self, bot_id: str, adapter_name: str, platform: str, parent=None):
         super().__init__(parent)
         self.bot_id = bot_id
         self.adapter_name = adapter_name
+        self.platform = platform
         self._is_online = True
         self.offline_color = QColor("#DCDCDC")
         self.theme_color = self.original_theme_color
@@ -102,8 +104,8 @@ class BotCard(QFrame):
             color: {self.theme_color.darker().name()};
         """)
 
-        # 细节信息 (适配器)
-        self.details_label = QLabel(f"Adapter: {self.adapter_name}")
+        # 细节信息
+        self.details_label = QLabel(f"{self.platform} via {self.adapter_name}")
         self.details_label.setStyleSheet(f"""
             font: 12px 'Segoe UI';
             color: #777777;
@@ -244,26 +246,32 @@ class BotCard(QFrame):
 
     def update_data(self, total: int, rate: float, uptime: Optional[int] = None):
         self.last_update_time = time.time()
-        try:
-            self.total_msg.setText(f"{int(total):,}")
-        except (ValueError, TypeError):
-            self.total_msg.setText("--")
 
         try:
-            self.rate_label.setText(f"{float(rate):.1f}/min")
+            total_text = f"{int(total):,}"
         except (ValueError, TypeError):
-            self.rate_label.setText("--/min")
+            total_text = "--"
+
+        try:
+            rate_text = f"{float(rate):.1f}/min"
+        except (ValueError, TypeError):
+            rate_text = "--/min"
 
         try:
             uptime_int = int(uptime) if uptime is not None else None
-            self.time_label.setText(self.format_uptime(
-                uptime_int) if uptime_int and uptime_int > 0 else "--")
+            uptime_text = self.format_uptime(
+                uptime_int) if uptime_int and uptime_int > 0 else "--"
         except (ValueError, TypeError):
-            self.time_label.setText("--")
+            uptime_text = "--"
 
-        self._update_time_text()
-        self.adjustSize()
-        self.updateGeometry()
+        time_str = time.strftime(
+            "%H:%M:%S", time.localtime(self.last_update_time))
+        last_update_text = f"更新: {time_str}"
+
+        self.total_msg.setText(total_text)
+        self.rate_label.setText(rate_text)
+        self.time_label.setText(uptime_text)
+        self.last_update.setText(last_update_text)
 
     def _show_context_menu(self, pos):
         menu = QMenu(self)
@@ -274,8 +282,8 @@ class BotCard(QFrame):
             QMenu::separator { height: 1px; background: #EEE; margin: 4px 0; }
         """)
         status_action = menu.addAction("下线" if self._is_online else "上线")
-        menu.addAction("📊 统计详情")
         menu.addSeparator()
+        msg_details = menu.addAction("📊 统计详情")
         roster_action = menu.addAction("⚙️ 名单设置")
 
         action = menu.exec_(self.mapToGlobal(pos))
@@ -284,6 +292,18 @@ class BotCard(QFrame):
         elif action == roster_action:
             talker.send_request(
                 "get_matchers", success_signal=self.matcher_signal)
+        elif action == msg_details:
+            page = PluginStatsViewer(self.bot_id, self.platform)
+            parent = self.parent()
+            show_method = None
+            while parent:
+                method = getattr(parent, "show_subpage", None)
+                if callable(method):
+                    show_method = method
+                    break
+                parent = parent.parent()
+            if show_method:
+                show_method(page, f"{self.bot_id} 数据统计")
 
     def _roster(self, data: ResponsePayload):
         page = PermissionConfigurator(data.data, bot_id=self.bot_id)
@@ -375,9 +395,9 @@ class BotCardManager(QObject):
             uptime = uptime or BotToolKit.timer.get_elapsed_time(bot_id)
             self.cards[bot_id].update_data(total, rate, int(uptime))
 
-    def add_bot(self, bot_id: str, adapter_name: str):
+    def add_bot(self, bot_id: str, adapter_name: str, platform: str):
         if bot_id not in self.cards:
-            card = BotCard(bot_id, adapter_name)
+            card = BotCard(bot_id, adapter_name, platform)
             self.cards[bot_id] = card
         return self.cards[bot_id]
 
@@ -461,10 +481,10 @@ class BotInfoPage(PageBase):
                 off_line_count += 1
         self.bot_count.setText(f"{on_line_count} 在线 / {off_line_count} 离线")
 
-    def add_bot(self, bot_id: str, adapter_name: str):
+    def add_bot(self, bot_id: str, adapter_name: str, platform: str):
         if not self.card_manager.has_bot(bot_id):
             BotToolKit.add_bot(bot_id)
-            card = self.card_manager.add_bot(bot_id, adapter_name)
+            card = self.card_manager.add_bot(bot_id, adapter_name, platform)
             self.card_layout.insertWidget(self.card_layout.count() - 1, card)
 
     def set_bot_status(self, bot_id: str, status: bool):
@@ -478,9 +498,10 @@ class BotInfoPage(PageBase):
 
         if type_ == "bot_connect":
             adapter_name = data.get("adapter", "Unknown")
+            platform = data.get("platform", "Unknown")
 
             if not self.card_manager.has_bot(bot_id):
-                self.add_bot(bot_id, adapter_name)
+                self.add_bot(bot_id, adapter_name, platform)
             else:
                 self.set_bot_status(bot_id, True)
                 card = self.card_manager.cards[bot_id]
@@ -492,6 +513,7 @@ class BotInfoPage(PageBase):
                 self.set_bot_status(bot_id, False)
 
     def on_enter(self):
+        self._refresh_all_data()
         self.data_timer.start(10000)
 
     def on_leave(self):

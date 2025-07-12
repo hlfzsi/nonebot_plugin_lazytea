@@ -1,4 +1,3 @@
-import asyncio
 import sys
 from PySide6.QtWidgets import (
     QDialog, QLabel, QVBoxLayout, QHBoxLayout, QApplication,
@@ -615,39 +614,6 @@ class MessageBoxBuilder:
         result = instance.new_exec_()
         return result
 
-    async def wait_for_result(
-        self,
-        bottom_type: Optional[MessageBoxConfig.ButtonType | Any] = None,
-        timeout: int = 0
-    ) -> bool:
-        """
-        异步等待消息框按钮点击结果
-
-        Args:
-            bottom_type (Optional[MessageBoxConfig.ButtonType]): 期望的按钮类型，None表示任意按钮
-            timeout (int): 超时时间(毫秒)，0表示无限等待
-
-        Returns:
-            bool: 如果点击了期望的按钮或任意按钮(当bottom_type为None)返回True，超时返回False
-        """
-        self.dialog = self.build()
-
-        future = asyncio.get_event_loop().create_future()
-
-        def on_finished(result):
-            if not future.done():
-                future.set_result(result)
-
-        self.dialog.finished.connect(on_finished)
-        self.dialog.open()
-
-        try:
-            result = await asyncio.wait_for(future, timeout=timeout if timeout > 0 else None)
-            return bottom_type is None or result == bottom_type
-        except asyncio.TimeoutError:
-            self.dialog.close()
-            return False
-
     def add_custom_widget(self, widget: QWidget) -> 'MessageBoxBuilder':
         """
         在消息内容和按钮之间添加一个自定义的QWidget。
@@ -681,6 +647,7 @@ class ModernMessageBox(QDialog):
         super().__init__()
         self._config = config
         self._result: Optional[MessageBoxConfig.ButtonType] = None
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._init_ui()
         self._setup_content()
         self._setup_icon()
@@ -818,6 +785,7 @@ class ModernMessageBox(QDialog):
         """创建单个按钮实例"""
         button = AnimatedButton(
             text=config.text,
+            parent=self,
             config=config
         )
 

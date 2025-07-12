@@ -21,7 +21,7 @@ from importlib.resources import files, as_file  # noqa
 
 import nonebot_plugin_localstore    # noqa
 
-__version__ = "0.0.1b4"
+__version__ = "0.0.1rc1"
 __author__ = "hlfzsi"
 
 try:

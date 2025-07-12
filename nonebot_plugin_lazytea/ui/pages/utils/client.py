@@ -132,7 +132,6 @@ class WebSocketClient:
                 return True
             except ConnectionClosed:
                 self.connected = False
-                logger.warning("Send failed, connection closed")
                 return False
         return False
 
