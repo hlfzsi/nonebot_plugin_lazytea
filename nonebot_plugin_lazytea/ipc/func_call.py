@@ -1,7 +1,7 @@
 import asyncio
 import sys
 import ujson
-from typing import Dict, Set, Type
+from typing import Any, Dict, Set, Type, get_origin
 from pydantic import BaseModel, ValidationError
 from nonebot.plugin import get_loaded_plugins, get_plugin_by_module_name
 from nonebot import get_plugin_config as nb_config
@@ -17,7 +17,7 @@ server = Server()
 def json_config(config: Type[BaseModel]):
     schema = config.model_json_schema()
     model: BaseModel = nb_config(config)
-    data = model.model_dump()
+    data = model.model_dump_json()
     return {
         "schema": schema,
         "data": data
@@ -28,6 +28,43 @@ def ujson_default(obj):
     if isinstance(obj, Set):
         return list(obj)
     return "Error"
+
+
+def _preprocess_data_for_coercion(data: Dict[str, Any], model: Type[BaseModel]) -> Dict[str, Any]:
+    """
+    在Pydantic验证前预处理数据
+    """
+    processed_data = data.copy()
+    model_fields = model.model_fields
+
+    for key, field_info in model_fields.items():
+        if key not in processed_data:
+            continue
+
+        value = processed_data[key]
+        origin_type = get_origin(field_info.annotation)
+
+        if type(value) == origin_type:
+            continue
+
+        if isinstance(value, str) and value.strip().lower() == 'none':
+            processed_data[key] = None
+            continue
+
+        if isinstance(value, str) and origin_type in (list, set, dict):
+            try:
+                processed_data[key] = ujson.loads(value)
+            except (ValueError, TypeError):
+                pass
+
+        current_value = processed_data[key]
+
+        if origin_type is list and isinstance(current_value, set):
+            processed_data[key] = list(current_value)
+        elif origin_type is set and isinstance(current_value, list):
+            processed_data[key] = set(current_value)
+
+    return processed_data
 
 
 @server.register_handler(method="get_plugins")
@@ -82,10 +119,12 @@ async def save_env(module_name: str, data: Dict):
     if not config:
         return {"error": "Plugin config not found"}
     try:
-        new_config = config(**data)
+        coerced_data = _preprocess_data_for_coercion(data, config)
+        new_config = config(**coerced_data)
         existed_config = nb_config(config)
     except ValidationError:
-        return {"error": "Plugin config unmatched"}
+        import traceback
+        return {"error": f"Plugin config unmatched \n {traceback.format_exc()}"}
     else:
         writer = EnvWriter(plugin_name)
         await writer.write(new_config, existed_config, _config.get_envfile())

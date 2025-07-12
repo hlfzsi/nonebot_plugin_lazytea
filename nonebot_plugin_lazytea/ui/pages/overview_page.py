@@ -165,7 +165,7 @@ class OverviewPage(PageBase):
         {
             "key": "repository",
             "title": "项目地址",
-            "content": "<a href='https://github.com/hlfzsi/nonebot_plugin_lazytea'>GitHub仓库</a>",
+            "content": "<a href='https://github.com/hlfzsi/nonebot_plugin_lazytea'>GitHub仓库</a> 点个star谢谢喵",
             "is_link": True
         }
     ]

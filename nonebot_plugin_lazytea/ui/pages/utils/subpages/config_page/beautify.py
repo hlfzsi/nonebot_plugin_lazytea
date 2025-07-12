@@ -11,7 +11,7 @@ class StyleManager:
     @staticmethod
     def apply_base_style(widget: QWidget) -> None:
         palette = widget.palette()
-        palette.setColor(QPalette.ColorRole.Window, QColor("#ffffff")) 
+        palette.setColor(QPalette.ColorRole.Window, QColor("#ffffff"))
         widget.setAutoFillBackground(True)
         widget.setPalette(palette)
 
@@ -166,6 +166,7 @@ class StyleManager:
                 selection-background-color: #4dabf7;
                 selection-color: #ffffff;
                 outline: 0px;
+                color: #000000;
             }
         """)
 

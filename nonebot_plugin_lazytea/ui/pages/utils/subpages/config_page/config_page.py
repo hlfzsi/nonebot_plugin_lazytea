@@ -625,7 +625,7 @@ class ConfigEditor(QWidget):
         def schedule_validation():
             try:
                 self.validation_timer.timeout.disconnect()
-            except RuntimeError: 
+            except RuntimeError:
                 pass
             self.validation_timer.timeout.connect(
                 lambda: self._validate_field(field_name))
@@ -668,6 +668,9 @@ class ConfigEditor(QWidget):
         try:
             data = self._get_current_values()
             self.model_cls(**data)
+            for k, v in data.items():
+                if isinstance(v, set):
+                    data[k] = list(v)
             talker.send_request(
                 "save_env", success_signal=self.success_signal, error_signal=self.error_signal,
                 module_name=self.moudle_name, data=data, timeout=30)
@@ -768,7 +771,7 @@ class ConfigEditor(QWidget):
     def _validate_all(self) -> bool:
         valid = all(self._validate_field(name) for name in self.widgets)
         return valid
-    
+
     def cleanup(self):
         if self.validation_timer.isActive():
             self.validation_timer.stop()

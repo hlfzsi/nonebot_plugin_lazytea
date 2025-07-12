@@ -1,4 +1,5 @@
 import os
+import ujson
 from typing import Any, List, TypedDict, Optional, Dict
 from PySide6.QtGui import (QColor, QPixmap,
                            QFontDatabase)
@@ -73,7 +74,8 @@ class PluginCard(QFrame):
 
     def _show_plugin_subpage(self, response: ResponsePayload):
         schema: Dict[str, Any] = response.data.get("schema")  # type: ignore
-        data: Dict[str, Any] = response.data.get("data")  # type: ignore
+        data: Dict[str, Any] = ujson.loads(
+            response.data.get("data", ""))  # type: ignore
         editor = ConfigEditor(schema, data, self.plugin_data.get("module"))
 
         parent = self.parent()
@@ -393,7 +395,7 @@ class PluginCard(QFrame):
     def _on_homepage_clicked(self, homepage: str):
         """处理插件主页点击事件  直接在浏览器中打开"""
         logger.debug(f"开始处理主页点击事件，主页地址：{homepage}")
-        webbrowser.open(homepage)
+        webbrowser.open(homepage, new=2)
 
     def cleanup(self):
         try:

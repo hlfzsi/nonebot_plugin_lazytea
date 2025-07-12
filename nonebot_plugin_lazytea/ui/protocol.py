@@ -6,7 +6,10 @@ import time
 
 def default(v):
     try:
-        return str(v)
+        if isinstance(v, set):
+            return list(v)
+        else:
+            return str(v)
     except:
         return "不受支持的类型,请手动修改"
 

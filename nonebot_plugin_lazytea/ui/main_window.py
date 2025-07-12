@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import random
+import webbrowser
 from typing import Any, ClassVar, Dict, List, Optional
 import sys
 from PySide6.QtWidgets import (
@@ -11,7 +12,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import (QPixmap, QColor, QIcon, QFont, QPainter,
                            QBrush, QCursor, QPainterPath, QBitmap,
                            QGuiApplication, QEnterEvent,
-                           QMouseEvent, QResizeEvent, QCloseEvent
+                           QMouseEvent, QResizeEvent
                            )
 from PySide6.QtCore import (
     Qt, QSize, QPropertyAnimation, QEasingCurve, QPoint,
@@ -26,7 +27,7 @@ from .pages.utils.conn import init_db, get_database
 
 
 def create_icon_from_unicode(unicode_char: str, size: int = 24) -> QIcon:
-    pixmap = QPixmap(size, size)  # type: ignore
+    pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     font = QFont()
@@ -292,27 +293,32 @@ class MainWindow(QWidget):
         self.tray_icon = QSystemTrayIcon(self)
         self.tray_icon.setIcon(self.app_icon)
 
-        # 创建托盘菜单
         tray_menu = QMenu()
 
-        # 显示主窗口的动作
         show_action = tray_menu.addAction("显示主窗口")
         show_action.triggered.connect(self.show_from_tray)
 
+        web_action = tray_menu.addAction("赏个star")
+        web_action.triggered.connect(self._open_url)
+
         tray_menu.addSeparator()
 
-        # 退出程序的动作
         quit_action = tray_menu.addAction("退出")
         quit_action.triggered.connect(self.quit_app)
 
-        # 设置托盘菜单
         self.tray_icon.setContextMenu(tray_menu)
-
-        # 点击托盘图标时显示主窗口
         self.tray_icon.activated.connect(self._on_tray_activated)
-
-        # 显示托盘图标
         self.tray_icon.show()
+
+    def _open_url(self):
+        webbrowser.open(
+            "https://github.com/hlfzsi/nonebot_plugin_lazytea", new=2)
+        self.tray_icon.showMessage(
+            "TEEEA",
+            "非常感谢您的star，每一个star都是我们前进的动力",
+            QSystemTrayIcon.MessageIcon.Information,
+            2000
+        )
 
     def _on_tray_activated(self, reason):
         """处理托盘图标的点击事件"""
@@ -599,7 +605,7 @@ class MainWindow(QWidget):
         self.min_btn = self.create_control_button("−", "#FFB6C1")
         self.close_btn = self.create_control_button("×", "#FF69B4")
 
-        self.min_btn.clicked.connect(self.close)
+        self.min_btn.clicked.connect(self._hide)
         self.close_btn.clicked.connect(self.quit_app)
 
         control_layout.addWidget(self.min_btn)
@@ -720,6 +726,16 @@ class MainWindow(QWidget):
         }
         """)
 
+    def _hide(self):
+        if self.tray_icon.isVisible():
+            self.hide()
+            self.tray_icon.showMessage(
+                "TEEEA",
+                "TEEEA已最小化到系统托盘",
+                QSystemTrayIcon.MessageIcon.Information,
+                2000
+            )
+
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
             self.dragging = True
@@ -772,19 +788,6 @@ class MainWindow(QWidget):
         if event.type() == QEvent.Type.WindowStateChange:
             self.update_mask()
         super().changeEvent(event)
-
-    def closeEvent(self, event: QCloseEvent):
-        if self.tray_icon.isVisible():
-            self.hide()
-            self.tray_icon.showMessage(
-                "TEEEA",
-                "TEEEA已最小化到系统托盘",
-                QSystemTrayIcon.MessageIcon.Information,
-                2000
-            )
-            event.ignore()
-        else:
-            event.accept()
 
 
 class OverlayContainer(QWidget):

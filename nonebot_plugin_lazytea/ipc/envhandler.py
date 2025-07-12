@@ -1,5 +1,5 @@
 import re
-import json
+import ujson
 import aiofiles
 from dataclasses import dataclass
 from typing import Dict, Any, List, Set, Optional
@@ -30,7 +30,12 @@ class EnvWriter:
         self.plugin_begin = f"# {self.target_plugin} begin"
         self.plugin_end = f"# {self.target_plugin} end"
         self.encoding = "utf-8"
-        self.key_pattern = re.compile(r"^\s*([\w-]+)\s*=")  # 预编译正则
+        self.key_pattern = re.compile(r"^\s*([\w-]+)\s*=")
+
+    @staticmethod
+    def json_default(v):
+        if isinstance(v, set):
+            return list(v)
 
     async def write(self, new_config: BaseModel, existed_config: BaseModel, env_file: str) -> None:
         """主写入流程"""
@@ -175,7 +180,7 @@ class EnvWriter:
         # 新增目标插件区块
         output.append(self.plugin_begin)
         output.extend(
-            f"{k}={json.dumps(v, ensure_ascii=False)}" for k, v in data.items())
+            f"{k}={ujson.dumps(v, ensure_ascii=False, default=self.json_default)}" for k, v in data.items())
         output.append(self.plugin_end)
 
         return output
