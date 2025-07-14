@@ -27,14 +27,11 @@ from .pages.utils.client import talker
 from .pages.utils.tealog import logger
 from .pages.utils.conn import init_db, get_database
 
-import tracemalloc
-dump1 = None
-
 
 def retroactive_aliasing_patch(entry_file_path: str, package_import_prefix: str):
     """
     允许直接导入LazyTea子进程使用的模块
-    
+
     :param entry_file_path: 入口脚本的 __file__ 变量。
     :param package_import_prefix: 你的包被外部导入时使用的顶级前缀，
                                   例如 'nonebot_plugin_lazytea'。
@@ -356,28 +353,6 @@ class MainWindow(QWidget):
         StdinListener.get_instance().shutdown_requested.connect(app.quit)
         app.aboutToQuit.connect(self.cleanup_overlay)
         app.aboutToQuit.connect(talker.stop)
-        QTimer.singleShot(9000, self._temp)
-        app.aboutToQuit.connect(self._temp2)
-
-    def _temp(self):
-        global dump1
-        print("开始收集内存数据")
-        tracemalloc.start()
-        dump1 = tracemalloc.take_snapshot()
-
-    def _temp2(self):
-        global dump1
-        print("开始收集内存数据")
-        dump2 = tracemalloc.take_snapshot()
-        if dump1:
-            top_stats = dump2.compare_to(dump1, 'lineno')
-            print("[ Top memory blocks with the most increase ]")
-            for stat in top_stats:
-                print(stat)
-
-        print("-"*50)
-        for stat in dump2.statistics('lineno'):
-            print(stat)
 
     def cleanup_overlay(self):
         for page_index in list(self.overlay_stacks.keys()):

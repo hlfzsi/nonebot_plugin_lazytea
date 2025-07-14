@@ -226,7 +226,7 @@ class MessageHandler(QObject):
                 except RuntimeError:
                     pass
         self._pending_requests.clear()
-        logger.info("MessageHandler has been shut down.")
+        logger.info("ws会话终止")
 
     def send_request(
         self,
