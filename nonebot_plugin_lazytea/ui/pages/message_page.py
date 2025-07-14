@@ -1,6 +1,5 @@
 import time
 import ujson
-import jieba.posseg as pseg
 from typing import Dict, List, Literal, Optional, Tuple
 
 from PySide6.QtCore import Qt, QTimer, QPoint, Signal
@@ -9,6 +8,7 @@ from PySide6.QtWidgets import (QVBoxLayout, QHBoxLayout, QCheckBox, QListWidget,
                                QMenu, QScrollBar, QPushButton)
 
 from .utils.client import talker
+from .utils.token import get_ngrams
 from .utils.BotTools import BotToolKit
 from .utils.Qcomponents.networkmanager import BubbleNetworkManager
 from .utils.conn import get_database, AsyncQuerySignal
@@ -261,6 +261,7 @@ class MessagePage(PageBase):
             self.main_layout.removeWidget(self.search_bar)
             self.search_bar.deleteLater()
 
+        keywords = ["正在搜索..."]
         self.search_bar = SearchBar(keywords, self)
         self.search_bar.exit_button.clicked.connect(self.exit_search)
 
@@ -456,8 +457,10 @@ class MessagePage(PageBase):
             widget: MessageBubble
             content = widget.content.toPlainText()
 
-            words = pseg.cut(content)
-
+            words = get_ngrams(content)
+            words = list(set(words))
+            # 向内存占用的妥协
+            """
             pos_mapping = {
                 'n': 'n', 'vn': 'v', 'v': 'v', 'a': 'a', 'i': 'i', 'l': 'i',
                 'j': 'ws', 'nr': 'ws', 'ns': 'ws', 'nt': 'ws', 'nz': 'ws',
@@ -477,7 +480,8 @@ class MessagePage(PageBase):
                 weight = important_pos[mapped_pos] + len(word) / 10
                 keywords_with_weight[word] = max(
                     keywords_with_weight.get(word, 0), weight)
-
+            
+            
             if not keywords_with_weight:
                 self.search_messages([content])
                 return
@@ -488,7 +492,11 @@ class MessagePage(PageBase):
 
             if not top_keywords or not all(kw.strip() for kw in top_keywords):
                 return
-
+            """
+            if not words:
+                return
+            else:
+                top_keywords = words
             self.search_messages(top_keywords)
 
     def add_message(self, metadata: MetadataType, content: str,

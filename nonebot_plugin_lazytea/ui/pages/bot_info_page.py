@@ -281,7 +281,7 @@ class BotCard(QFrame):
             QMenu::item:selected { background: #F0F4F8; border-radius: 4px; }
             QMenu::separator { height: 1px; background: #EEE; margin: 4px 0; }
         """)
-        status_action = menu.addAction("下线" if self._is_online else "上线")
+        status_action = menu.addAction("关闭" if self._is_online else "开机")
         menu.addSeparator()
         msg_details = menu.addAction("📊 统计详情")
         roster_action = menu.addAction("⚙️ 名单设置")
@@ -289,6 +289,8 @@ class BotCard(QFrame):
         action = menu.exec_(self.mapToGlobal(pos))
         if action == status_action:
             self._toggle_status()
+            talker.send_request(
+                "bot_switch", bot_id=self.bot_id, platform=self.platform, is_online_now=self._is_online)
         elif action == roster_action:
             talker.send_request(
                 "get_matchers", success_signal=self.matcher_signal)

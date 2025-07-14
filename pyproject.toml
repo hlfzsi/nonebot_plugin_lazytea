@@ -16,7 +16,6 @@ dependencies = [
     "apsw>=3.50.1.0",
     "nonebot-plugin-localstore>=0.7.4",
     "xxhash>=3.5.0",
-    "jieba>=0.42.1",
     "nonebot-plugin-uninfo>=0.8.2",
     "nonebot-plugin-alconna>=0.59.0",
 ]

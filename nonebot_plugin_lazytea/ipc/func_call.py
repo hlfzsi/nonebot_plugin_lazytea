@@ -9,6 +9,7 @@ from nonebot import get_plugin_config as nb_config, logger
 
 from .server import Server
 from ..utils.config import _config
+from ..utils.commute import bot_off_line
 from .envhandler import EnvWriter
 from ..utils.roster import FuncTeller
 
@@ -204,3 +205,11 @@ def ui_load(plugins_to_load: List):
         except Exception as e:
             logger.error(f"导入{plugin_name}.__call__ 时出现错误{e}")
             continue
+
+
+@server.register_handler("bot_switch")
+def bot_switch(bot_id: str, platform: str, is_online_now: bool):
+    if is_online_now:
+        bot_off_line[platform].discard(bot_id)
+    else:
+        bot_off_line[platform].add(bot_id)

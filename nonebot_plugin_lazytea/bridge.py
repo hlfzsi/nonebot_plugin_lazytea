@@ -15,7 +15,7 @@ from nonebot_plugin_alconna.uniseg.segment import (
 )
 from nonebot_plugin_uninfo import Uninfo
 from nonebot_plugin_uninfo.adapters import alter_get_fetcher
-from .utils.commute import send_event
+from .utils.commute import send_event, bot_off_line
 from .utils.parse import get_function_fingerprint
 from .utils.roster import FuncTeller, RuleData
 
@@ -168,6 +168,9 @@ markdown_converter = UniMessageMarkdownConverter()
 
 @event_preprocessor
 async def reocrd_event(bot: Bot, event: Event, session: Uninfo):
+    if bot.self_id in bot_off_line[session.scope]:
+        raise IgnoredException(f"{bot.self_id}已经下线")
+
     type = event.get_type()
     if type == "message":
 

@@ -6,8 +6,7 @@ from PySide6.QtCore import QObject, QTimer, Signal, QMutex, QMutexLocker, QThrea
 from collections import defaultdict, deque
 from typing import Dict, List, Optional, Tuple, Any, Union, Sequence
 
-import jieba
-
+from ..token import get_ngrams
 from ..tealog import logger
 
 
@@ -114,7 +113,7 @@ class WriteWorker(QThread):
         self.running = True
         self.conn: Optional[apsw.Connection] = None
 
-    def register_jieba_tokenizer(self):
+    def register_tokenizer(self):
         """注册自定义分词器到数据库连接"""
         try:
             def jieba_tokenize(*args):
@@ -122,7 +121,7 @@ class WriteWorker(QThread):
                     return ""
                 text = str(args[0])
 
-                words = jieba.cut(text, cut_all=False)
+                words = get_ngrams(text)
 
                 filtered_words = (word.strip() for word in words)
                 return " ".join(word for word in filtered_words if word)
@@ -141,7 +140,7 @@ class WriteWorker(QThread):
             self.conn = apsw.Connection(self.db_path)
 
             # 注册自定义分词器
-            self.register_jieba_tokenizer()
+            self.register_tokenizer()
 
             while True:
                 with QMutexLocker(self.mutex):
