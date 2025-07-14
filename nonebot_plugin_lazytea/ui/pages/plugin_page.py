@@ -1,6 +1,6 @@
 import os
 import ujson
-from typing import Any, List, TypedDict, Optional, Dict
+from typing import Any, List, Dict, Optional
 from PySide6.QtGui import (QColor, QPixmap,
                            QFontDatabase)
 from PySide6.QtCore import Qt, QSize, Signal
@@ -14,35 +14,10 @@ from .utils.version_check import VersionUtils
 from .utils.subpages.config_page import ConfigEditor
 from .utils.Qcomponents.MessageBox import MessageBoxBuilder, MessageBoxConfig, ButtonConfig
 from .utils.Qcomponents.networkmanager import ReleaseNetworkManager
+from .utils.ui_types.plugins import PluginInfo
+from .background.start import name_module
 from .utils.client import talker, ResponsePayload
 from .utils.tealog import logger
-
-
-class PluginMetaInfo(TypedDict):
-    name: Optional[str]
-    """插件的显示名称"""
-    description: str
-    """插件描述（默认为“暂无描述”）"""
-    homepage: Optional[str]
-    """插件主页链接"""
-    config_exist: bool
-    """是否存在配置项"""
-    author: str
-    """插件作者"""
-    version: str
-    """插件版本"""
-    icon_abspath: str
-    """插件图标绝对路径"""
-    # extra
-
-
-class PluginInfo(TypedDict):
-    name: str
-    """插件名称"""
-    module: str
-    """插件所在模块名"""
-    meta: PluginMetaInfo
-    """插件的元信息字典"""
 
 
 def format_plugin_name(name: str) -> str:
@@ -69,8 +44,26 @@ class PluginCard(QFrame):
 
     def _on_config_clicked(self):
         """获取插件配置"""
-        talker.send_request("get_plugin_config",
-                            success_signal=self.success_signal, name=self.plugin_data.get("name"))
+        instead_widget = self._get_plugin_widget()
+        if instead_widget:
+            parent = self.parent()
+            grandparent = None
+            while parent is not None:
+                if isinstance(parent, PluginPage):
+                    grandparent = parent
+                    break
+                parent = parent.parent()
+
+            plugin_name = self.plugin_data["name"]
+
+            if grandparent is not None:
+                grandparent.show_subpage(instead_widget, f"{plugin_name}页面")
+            else:
+                logger.warning(f"加载插件 {plugin_name} 时配置页面未找到父控件")
+
+        else:
+            talker.send_request("get_plugin_config",
+                                success_signal=self.success_signal, name=self.plugin_data.get("name"))
 
     def _show_plugin_subpage(self, response: ResponsePayload):
         schema: Dict[str, Any] = response.data.get("schema")  # type: ignore
@@ -271,6 +264,27 @@ class PluginCard(QFrame):
         """初始化右键菜单"""
         self.context_menu = None
 
+    def _get_plugin_widget(self) -> Optional[QWidget]:
+        probable_module = name_module.get(self.plugin_data["name"])
+        instead_widget = None
+
+        if probable_module:
+            widget_class = getattr(probable_module, "ShowMyPlugin", None)
+            if widget_class is not None and issubclass(widget_class, QWidget):
+                instead_widget = widget_class(parent=self)
+
+        return instead_widget
+
+    def _has_plugin_widget(self):
+        probable_module = name_module.get(self.plugin_data["name"])
+
+        if probable_module:
+            widget_class = getattr(probable_module, "ShowMyPlugin", None)
+            if widget_class is not None and issubclass(widget_class, QWidget):
+                return True
+        else:
+            return False
+
     def _show_context_menu(self, pos):
         """显示右键菜单"""
         menu = QMenu(self)
@@ -301,8 +315,10 @@ class PluginCard(QFrame):
         # 添加菜单项
         actions = []
 
-        # 仅在插件有配置时添加配置菜单项
-        if self.plugin_data["meta"]["config_exist"]:
+        instead_widget = self._has_plugin_widget()
+
+        # 仅在插件有配置或提供页面时添加配置菜单项
+        if self.plugin_data["meta"]["config_exist"] or instead_widget:
             config_action = menu.addAction("⚙️ 插件配置")
             actions.append((config_action, self._on_config_clicked))
             menu.addSeparator()

@@ -88,6 +88,8 @@ async def pre():
     ui_env["UIDATADIR"] = str(
         nonebot_plugin_localstore.get_plugin_data_dir())
 
+    ui_env["LAUCHASCHILD"] = "true"
+
     creation_flags = {}
     if sys.platform == "win32":
         creation_flags['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP

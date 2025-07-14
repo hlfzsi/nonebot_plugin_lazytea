@@ -1,10 +1,11 @@
 import asyncio
+import importlib
 import sys
 import ujson
-from typing import Any, Dict, Set, Type, get_origin
+from typing import Any, Dict, List, Set, Type, get_origin
 from pydantic import BaseModel, ValidationError
 from nonebot.plugin import get_loaded_plugins, get_plugin_by_module_name
-from nonebot import get_plugin_config as nb_config
+from nonebot import get_plugin_config as nb_config, logger
 
 from .server import Server
 from ..utils.config import _config
@@ -86,7 +87,6 @@ def get_plugins():
                    for plugin in plugins}
 
     plugin_json = ujson.dumps(plugin_dict, default=ujson_default)
-
     return ujson.loads(plugin_json)
 
 
@@ -190,3 +190,17 @@ async def update_plugin(plugin_name: str):
         return f"插件 {plugin_name} 更新成功！\n{stdout.decode()}"
     else:
         return {"error": f"插件 {plugin_name} 更新失败！\n{stderr.decode()}"}
+
+
+@server.register_handler("ui_load")
+def ui_load(plugins_to_load: List):
+    for plugin_name in plugins_to_load:
+        try:
+            module_path = f"{plugin_name}.__call__"
+            importlib.import_module(module_path)
+            logger.debug(f"成功导入{module_path}")
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.error(f"导入{plugin_name}.__call__ 时出现错误{e}")
+            continue

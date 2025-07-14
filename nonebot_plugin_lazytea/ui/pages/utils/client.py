@@ -31,22 +31,32 @@ class WebSocketWorker(QRunnable):
         while not self.stop_event.is_set():
             try:
                 with connect(self.client.uri) as websocket:
-                    self.client.ws = websocket  # type: ignore
+                    self.client.ws = websocket
                     self.signals.connection_state.emit(True)
 
                     while not self.stop_event.is_set():
                         try:
-                            message = websocket.recv()
-                            self._handle_message(message)  # type: ignore
+                            message = websocket.recv(timeout=1)
+                            if message:
+                                self._handle_message(message)  # type: ignore
+                        except TimeoutError:
+                            continue
                         except (ConnectionClosed, ConnectionRefusedError):
+                            logger.info("Connection closed.")
                             self.stop_event.set()
                             break
-
+                        except Exception as e:
+                            logger.error(f"Error receiving message: {e}")
+                            self.stop_event.set()
+                            break
             except Exception as e:
-                import traceback
-                traceback.print_exc()
                 self.signals.error.emit(str(e))
-                break
+                self.stop_event.wait(5)
+            finally:
+                if self.client.ws:
+                    self.client.ws.close()
+                    self.client.ws = None
+                self.signals.connection_state.emit(False)
 
     def _handle_message(self, raw_data: str):
         if ProtocolMessage.SEPARATOR in raw_data:
@@ -67,12 +77,13 @@ class HeartbeatWorker(QRunnable):
 
     def run(self):
         while not self.stop_event.is_set():
-            if self.client.ws:
+            if self.client.connected and self.client.ws:
                 try:
                     header = MessageHeader(
                         msg_id=str(uuid.uuid4()),
                         msg_type="heartbeat",
-                        timestamp=time.time()
+                        timestamp=time.time(),
+                        correlation_id=None
                     )
                     message = ProtocolMessage.encode(
                         header, {"status": "alive"})
@@ -86,29 +97,37 @@ class WebSocketClient:
     def __init__(
         self,
         message_cb: Optional[Callable[[MessageHeader, Any], None]] = None,
+        connection_cb: Optional[Callable[[bool], None]] = None,
         port: int | str = os.getenv("PORT", "8000"),
         token: str = os.getenv("TOKEN", "HELLO?")
     ):
         self.port = port
         self.uri = f"ws://127.0.0.1:{self.port}/plugin_GUI?token={quote(token)}"
-        self.ws = None
+        self.ws: Optional[Any] = None
         self.message_cb = message_cb
+        self.connection_cb = connection_cb
         self.thread_pool = QThreadPool.globalInstance()
         self.ws_worker = WebSocketWorker(self)
         self.heartbeat_worker = HeartbeatWorker(self)
         self.connected = False
+
+        self._workers_started = False
+
         self._setup_signals()
 
     def _setup_signals(self):
         self.ws_worker.signals.message_received.connect(
             self._on_message_received)
-        self.ws_worker.signals.error.connect(lambda e: ...)
+        self.ws_worker.signals.error.connect(
+            lambda e: logger.error(f"WebSocket Error: {e}"))
         self.ws_worker.signals.connection_state.connect(
             self._on_connection_state)
 
     def _on_connection_state(self, state: bool):
         """处理连接状态变化"""
         self.connected = state
+        if self.connection_cb:
+            self.connection_cb(state)
 
     @Slot(MessageHeader, dict)
     def _on_message_received(self, header: MessageHeader, payload: dict):
@@ -116,9 +135,14 @@ class WebSocketClient:
             self.message_cb(header, payload)
 
     def run(self):
-        """启动客户端"""
-        self.thread_pool.start(self.ws_worker)
-        self.thread_pool.start(self.heartbeat_worker)
+        """
+        启动客户端。
+        多次调用不会产生副作用。
+        """
+        if not self._workers_started:
+            self.thread_pool.start(self.ws_worker)
+            self.thread_pool.start(self.heartbeat_worker)
+            self._workers_started = True
 
     def send_raw_message(self, message: str) -> bool:
         """发送原始消息,返回是否发送成功"""
@@ -138,14 +162,14 @@ class WebSocketClient:
     def stop(self):
         self.ws_worker.stop_event.set()
         self.heartbeat_worker.stop_event.set()
-
         if self.ws:
             try:
                 self.ws.close()
             except Exception as e:
                 logger.warning(f"关闭 websocket 时发生错误: {e}")
-
         self.connected = False
+        self._workers_started = False
+        logger.debug("WebSocket client stopped.")
 
 
 class RequestDict(TypedDict):
@@ -155,17 +179,54 @@ class RequestDict(TypedDict):
 
 
 class MessageHandler(QObject):
-    """消息处理器，处理所有消息路由和请求响应"""
+    """
+    消息处理器,处理所有消息路由和请求响应。
+    提供启动后和关闭前钩子信号。
+    """
+    started = Signal()
+    stopping = Signal()
 
     def __init__(self):
         super().__init__()
-        self.client = WebSocketClient(self.sort_data)
+        self.client = WebSocketClient(
+            message_cb=self.sort_data,
+            connection_cb=self._handle_connection_change
+        )
         self.signal_dict: Dict[str, List[SignalInstance]] = defaultdict(list)
         self._pending_requests: Dict[str, RequestDict] = {}
+        self._started_emitted_this_session = False
+
+    def _handle_connection_change(self, is_connected: bool) -> None:
+        """处理连接状态变化，用于触发 started 信号"""
+        if is_connected and not self._started_emitted_this_session:
+            self.started.emit()
+            self._started_emitted_this_session = True
+        elif not is_connected:
+            self._started_emitted_this_session = False
 
     def start(self) -> None:
-        """启动客户端"""
+        """启动客户端并开始监听连接"""
         self.client.run()
+
+    def stop(self) -> None:
+        """停止客户端，并触发关闭前钩子"""
+        self.stopping.emit()
+
+        self.client.stop()
+
+        # 清理待处理的请求
+        for msg_id, request_info in list(self._pending_requests.items()):
+            request_info["timer"].stop()
+            request_info["timer"].deleteLater()
+
+            if error_signal := request_info.get("error_signal"):
+                try:
+                    error_signal.emit(
+                        "Client is shutting down. Request cancelled.")
+                except RuntimeError:
+                    pass
+        self._pending_requests.clear()
+        logger.info("MessageHandler has been shut down.")
 
     def send_request(
         self,
@@ -230,7 +291,13 @@ class MessageHandler(QObject):
         # 处理其他类型消息
         else:
             for signal in self.signal_dict[header.msg_type]:
-                signal.emit(header.msg_type, payload)
+                try:
+                    signal.emit(header.msg_type, payload)
+                except RuntimeError as e:
+                    if "deleted" in str(e).lower():
+                        self.signal_dict[header.msg_type].remove(signal)
+                    else:
+                        raise e
 
     def _handle_response(self, msg_id: str, payload: Dict):
         """处理响应消息"""
@@ -264,23 +331,6 @@ class MessageHandler(QObject):
             raise ValueError("At least one type required")
         for type_ in types:
             self.signal_dict[type_].append(signal)
-
-    def stop(self) -> None:
-        self.client.stop()
-
-        for msg_id, request_info in list(self._pending_requests.items()):
-            request_info["timer"].stop()
-            request_info["timer"].deleteLater()
-
-            if error_signal := request_info.get("error_signal"):
-                try:
-                    error_signal.emit(
-                        "Client is shutting down. Request cancelled.")
-                except RuntimeError:
-                    pass
-
-        self._pending_requests.clear()
-        logger.info("ws会话关闭")
 
 
 # 全局实例

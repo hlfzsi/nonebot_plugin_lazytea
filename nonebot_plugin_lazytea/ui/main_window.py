@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import random
+from types import ModuleType
 import webbrowser
 from typing import Any, ClassVar, Dict, List, Optional
 import sys
@@ -18,12 +19,87 @@ from PySide6.QtCore import (
     Qt, QSize, QPropertyAnimation, QEasingCurve, QPoint,
     QParallelAnimationGroup, QEvent, Signal, QPointF, QRectF, QTimer
 )
+from .pages.background.start import PluginInit
 from .pages import OverviewPage, BotInfoPage, MessagePage, PageBase, PluginPage
 from .pages.background.plugin_recorder import Recorder
 from .pages.background.quit import StdinListener
 from .pages.utils.client import talker
 from .pages.utils.tealog import logger
 from .pages.utils.conn import init_db, get_database
+
+import tracemalloc
+dump1 = None
+
+
+def retroactive_aliasing_patch(entry_file_path: str, package_import_prefix: str):
+    """
+    允许直接导入LazyTea子进程使用的模块
+    
+    :param entry_file_path: 入口脚本的 __file__ 变量。
+    :param package_import_prefix: 你的包被外部导入时使用的顶级前缀，
+                                  例如 'nonebot_plugin_lazytea'。
+    """
+    logger.debug(
+        f"[retroactive_aliasing_patch] 开始执行，目标包: '{package_import_prefix}'")
+    try:
+        entry_path = Path(entry_file_path).resolve()
+
+        pkg_dir = entry_path
+        while pkg_dir.name != package_import_prefix:
+            pkg_dir = pkg_dir.parent
+            if pkg_dir == pkg_dir.parent:
+                raise FileNotFoundError(
+                    f"无法在 '{entry_file_path}' 的父路径中找到包目录 '{package_import_prefix}'")
+
+        if package_import_prefix not in sys.modules:
+            fake_module = ModuleType(package_import_prefix)
+            fake_module.__path__ = [str(pkg_dir)]
+            sys.modules[package_import_prefix] = fake_module
+            logger.debug(
+                f"[Hyper-Precise Patch] 成功伪造父包 '{package_import_prefix}'")
+
+    except Exception as e:
+        logger.error(f"严重错误: 补丁初始化失败，无法定位包目录: {e}")
+        return
+
+    loaded_modules = list(sys.modules.values())
+
+    for module in loaded_modules:
+        if not hasattr(module, '__file__') or not module.__file__:
+            continue
+
+        try:
+            module_path = Path(module.__file__).resolve()
+        except (TypeError, ValueError):
+            continue
+
+        try:
+            is_our_module = module_path.is_relative_to(pkg_dir)
+        except AttributeError:
+            is_our_module = str(module_path).startswith(
+                str(pkg_dir) + os.path.sep)
+
+        if is_our_module:
+            relative_to_pkg_dir = module_path.relative_to(pkg_dir)
+
+            module_parts = list(relative_to_pkg_dir.parts)
+            if module_parts[-1].lower() == '__init__.py':
+                module_parts.pop()
+            else:
+                module_parts[-1] = module_parts[-1][:-3]
+
+            module_suffix = '.'.join(module_parts)
+
+            if module_suffix:
+                canonical_name = f"{package_import_prefix}.{module_suffix}"
+            else:
+                canonical_name = package_import_prefix
+
+            if canonical_name not in sys.modules:
+                sys.modules[canonical_name] = module
+                original_name = module.__name__
+                logger.debug(
+                    f"[retroactive_aliasing_patch] 成功关联: '{original_name}' => '{canonical_name}'")
 
 
 def create_icon_from_unicode(unicode_char: str, size: int = 24) -> QIcon:
@@ -268,12 +344,40 @@ class MainWindow(QWidget):
         self.load_decoration_image()
 
         talker.start()
+        self.plugininit = None      # Never call it
         QTimer.singleShot(0, init_db)
+
+        def set_plugininit():
+            self.plugininit = PluginInit()  # against GC
+
+        talker.started.connect(set_plugininit)
         QTimer.singleShot(50, lambda: Recorder(parent=self))
         StdinListener.get_instance().start()
         StdinListener.get_instance().shutdown_requested.connect(app.quit)
         app.aboutToQuit.connect(self.cleanup_overlay)
         app.aboutToQuit.connect(talker.stop)
+        QTimer.singleShot(9000, self._temp)
+        app.aboutToQuit.connect(self._temp2)
+
+    def _temp(self):
+        global dump1
+        print("开始收集内存数据")
+        tracemalloc.start()
+        dump1 = tracemalloc.take_snapshot()
+
+    def _temp2(self):
+        global dump1
+        print("开始收集内存数据")
+        dump2 = tracemalloc.take_snapshot()
+        if dump1:
+            top_stats = dump2.compare_to(dump1, 'lineno')
+            print("[ Top memory blocks with the most increase ]")
+            for stat in top_stats:
+                print(stat)
+
+        print("-"*50)
+        for stat in dump2.statistics('lineno'):
+            print(stat)
 
     def cleanup_overlay(self):
         for page_index in list(self.overlay_stacks.keys()):
@@ -983,6 +1087,8 @@ def run(*args: Any, **kwargs: Any) -> None:
 
         app.aboutToQuit.connect(get_database().shutdown)
         try:
+            if os.getenv("LAUCHASCHILD"):
+                retroactive_aliasing_patch(__file__, 'nonebot_plugin_lazytea')
             app.exec()
         except KeyboardInterrupt:
             app.quit()
