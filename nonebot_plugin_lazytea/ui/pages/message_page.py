@@ -57,7 +57,7 @@ class SearchBar(QWidget):
         layout = QHBoxLayout()
         layout.setContentsMargins(8, 4, 8, 4)
 
-        search_label = QLabel(f"{'、'.join(keywords)}")
+        search_label = QLabel(f"{','.join(keywords)}")
         search_label.setStyleSheet("font-size: 13px; color: #0D47A1;")
 
         self.exit_button = QPushButton("退出搜索")
@@ -102,6 +102,7 @@ class MessagePage(PageBase):
         self.earliest_loaded_ts = None  # 当前加载的最早时间戳
         self.earliest_loaded_id = None  # 当前加载的最早消息ID
         self.search_keywords = []       # 搜索关键词
+        self.sorted_search_ids = []     # 记录搜索id顺序
 
         self.reached_earliest = False  # 是否已到达最早消息
 
@@ -240,9 +241,8 @@ class MessagePage(PageBase):
             SELECT rowid, bm25(message_for_fts) as score
             FROM message_for_fts
             WHERE plaintext MATCH ?
-            AND bm25(message_for_fts) < ?
             ORDER BY bm25(message_for_fts) DESC
-            LIMIT 300
+            LIMIT 50
         """
 
         signal = AsyncQuerySignal()
@@ -250,7 +250,7 @@ class MessagePage(PageBase):
 
         get_database().execute_async(
             query,
-            (fts_query, 0.75),
+            (fts_query,),
             callback_signal=signal,
             for_write=False
         )
@@ -261,32 +261,33 @@ class MessagePage(PageBase):
             self.main_layout.removeWidget(self.search_bar)
             self.search_bar.deleteLater()
 
-        keywords = ["正在搜索..."]
+        keywords = ["正在搜索...", "结果按照相关性排序"]    # 不再显示关键词
         self.search_bar = SearchBar(keywords, self)
         self.search_bar.exit_button.clicked.connect(self.exit_search)
 
-        # 将搜索条带插入到标题和消息列表之间
         self.main_layout.insertWidget(1, self.search_bar)
 
     def _handle_search_results(self, results: List[Tuple], error: Exception):
         if error or not results:
+            if self.search_bar:
+                self.exit_search()
             return
 
-        rowids = [rowid[0] for rowid in results]
+        self.sorted_search_ids = [rowid[0] for rowid in results]
 
-        placeholders = ','.join('?' * len(rowids))
+        placeholders = ','.join('?' * len(self.sorted_search_ids))
         query = f"""
-            SELECT meta, content, bot
+            SELECT id, meta, content, bot
             FROM Message
             WHERE id IN ({placeholders})
         """
-
+        # 由于sqlite优化策略，这里会丢失id顺序
         signal = AsyncQuerySignal()
         signal.finished.connect(self._show_search_results)
 
         get_database().execute_async(
             query,
-            tuple(rowids),
+            tuple(self.sorted_search_ids),
             callback_signal=signal,
             for_write=False
         )
@@ -294,11 +295,16 @@ class MessagePage(PageBase):
     def _show_search_results(self, results: List[Tuple], error: Exception):
         """处理搜索结果"""
         if error:
-            self.state = "on_show"
+            if self.search_bar:
+                self.exit_search()
             return
 
+        order_map = {msg_id: index for index,
+                     msg_id in enumerate(self.sorted_search_ids)}
+        sorted_results = sorted(
+            results, key=lambda r: order_map.get(r[0], float('inf')))
         self._clear_message_list()
-        for meta, content, bot in results:
+        for _, meta, content, bot in sorted_results:
             meta = ujson.loads(meta)
             self.add_message(meta, content, BotToolKit.color.get(bot))
 
