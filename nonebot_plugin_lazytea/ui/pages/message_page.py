@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QVBoxLayout, QHBoxLayout, QCheckBox, QListWidget,
                                QMenu, QScrollBar, QPushButton)
 
 from .utils.client import talker
-from .utils.token import get_ngrams
+from .utils.token import tokenize
 from .utils.BotTools import BotToolKit
 from .utils.Qcomponents.networkmanager import BubbleNetworkManager
 from .utils.conn import get_database, AsyncQuerySignal
@@ -224,25 +224,43 @@ class MessagePage(PageBase):
         self.list_widget.clear()
 
     def search_messages(self, keywords: List[str]):
-        """搜索消息"""
+        """
+        搜索消息。
+        该方法首先通过 FTS 和 BM25 分数从数据库中获取一个候选消息池，
+        然后在 Python 中计算每个消息的 'richness'（关键词匹配数），并进行最终排序。
+        """
         if not keywords:
             return
 
-        self.search_keywords = keywords
+        # 清理并验证关键词
+        self.search_keywords = [kw.strip() for kw in keywords if kw.strip()]
+        if not self.search_keywords:
+            return
+
         self.state = "searching"
         self._clear_message_list()
+        self._add_search_bar(self.search_keywords)
 
-        self._add_search_bar(keywords)
+        escaped_keywords = [
+            f'"{kw.replace("\"", "\"\"")}"' for kw in self.search_keywords]
+        fts_query = ' OR '.join(escaped_keywords)
 
-        fts_query = ' OR '.join(
-            f'"{keyword}"' for keyword in keywords if keyword.strip())
-
-        query = """
-            SELECT rowid, bm25(message_for_fts) as score
-            FROM message_for_fts
-            WHERE plaintext MATCH ?
-            ORDER BY bm25(message_for_fts) DESC
-            LIMIT 50
+        query = f"""
+            SELECT
+                m.id,
+                m.meta,
+                m.content,
+                m.bot,
+                bm25(f.message_for_fts) AS score
+            FROM
+                message_for_fts AS f
+            JOIN
+                Message AS m ON f.rowid = m.id
+            WHERE
+                f.message_for_fts MATCH ?
+            ORDER BY
+                score DESC
+            LIMIT 300
         """
 
         signal = AsyncQuerySignal()
@@ -272,25 +290,34 @@ class MessagePage(PageBase):
             if self.search_bar:
                 self.exit_search()
             return
+        processed_results = []
+        lower_keywords = [kw.lower() for kw in self.search_keywords]
 
-        self.sorted_search_ids = [rowid[0] for rowid in results]
+        for row in results:
+            msg_content = row[2]
+            lower_content = msg_content.lower()
 
-        placeholders = ','.join('?' * len(self.sorted_search_ids))
-        query = f"""
-            SELECT id, meta, content, bot
-            FROM Message
-            WHERE id IN ({placeholders})
-        """
-        # 由于sqlite优化策略，这里会丢失id顺序
-        signal = AsyncQuerySignal()
-        signal.finished.connect(self._show_search_results)
+            richness = sum(
+                1 for keyword in lower_keywords if keyword in lower_content)
 
-        get_database().execute_async(
-            query,
-            tuple(self.sorted_search_ids),
-            callback_signal=signal,
-            for_write=False
+            processed_results.append({
+                "data": row[:-1],
+                "richness": richness,
+                "score": row[-1]
+            })
+
+        final_sorted_list = sorted(
+            processed_results,
+            key=lambda x: (x['richness'], x['score']),
+            reverse=True
         )
+
+        top_results = final_sorted_list[:50]
+
+        self.sorted_search_ids = [res['data'][0] for res in top_results]
+        final_data_tuples = [res['data'] for res in top_results]
+
+        self._show_search_results(final_data_tuples, None)
 
     def _show_search_results(self, results: List[Tuple], error: Exception):
         """处理搜索结果"""
@@ -463,7 +490,7 @@ class MessagePage(PageBase):
             widget: MessageBubble
             content = widget.content.toPlainText()
 
-            words = get_ngrams(content)
+            words = tokenize(content)
             words = list(set(words))
             # 向内存占用的妥协
             """

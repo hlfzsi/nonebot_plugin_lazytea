@@ -185,7 +185,7 @@ async def reocrd_event(bot: Bot, event: Event, session: Uninfo):
             "bot": bot.self_id,
             "content": content_md,
             "userid": user_id,
-            "session": f"{f"群聊: {group_id}" if group_id is not None else "私信"} | 用户: {session.user.nick or ""} / {user_id}",
+            "session": f"{(f'群聊: {group_id}' if group_id is not None else '私信')} | 用户: {session.user.nick or ''} / {user_id}",
             "avatar": avatar,
             "groupid": group_id,
             "time": int(time.time())
@@ -244,27 +244,44 @@ async def run_post(bot: Bot, matcher: Matcher, exception: Optional[Exception], s
 
 @Bot.on_calling_api
 async def handle_api_call(bot: Bot, api: str, data: Dict[str, Any]):
-    # 实验性支持，目前已知支持ob11
-    if api == "send_msg":
-        message_to_send = UniMessage.of(data["message"])
-        content_md = markdown_converter.convert(message_to_send)
+    # PR welcome
+    # 欢迎贡献你使用的适配器的实现
+    async def send(msg: UniMessage):
+        content_md = markdown_converter.convert(msg)
         data_to_send = {
             "api": api,
             "content": content_md,
             "bot": bot.self_id,
-            "session": f"{data.get("group_id", "私聊")}-{data.get("user_id", "未知")}",
-            "groupid": data.get("group_id", "私聊"),
+            "session": f"{data.get("group_id", "Unknown")}-{data.get("user_id", "Unknown")}",
+            "groupid": data.get("group_id", "Unknown"),
             "time": int(time.time())
         }
         await send_event("call_api", data_to_send)
 
-    # else:
-    #    data_to_send = {
-    #        "api": api,
-    #        "bot": bot.self_id,
-    #        "time": int(time.time())
-    #    }
-    # await send_event("call_api", data_to_send)
+    # 实验性支持，目前已尝试支持ob11
+    if api == "send_msg":
+        # ob11
+        message_to_send = UniMessage.of(data["message"])
+        await send(message_to_send)
+
+    # elif api == "post_c2c_messages":
+        # QQapi
+        ...
+
+    # elif api == "post_group_messages":
+        # QQapi
+        ...
+
+    else:
+        logger.debug(f"未捕获的api调用: {api}\n{data}")
+
+        # else:
+        #    data_to_send = {
+        #        "api": api,
+        #        "bot": bot.self_id,
+        #        "time": int(time.time())
+        #    }
+        # await send_event("call_api", data_to_send)
 
 
 @driver.on_bot_connect

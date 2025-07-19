@@ -6,7 +6,7 @@ from PySide6.QtCore import QObject, QTimer, Signal, QMutex, QMutexLocker, QThrea
 from collections import defaultdict, deque
 from typing import Dict, List, Optional, Tuple, Any, Union, Sequence
 
-from ..token import get_ngrams
+from ..token import tokenize
 from ..tealog import logger
 
 
@@ -121,7 +121,7 @@ class WriteWorker(QThread):
                     return ""
                 text = str(args[0])
 
-                words = get_ngrams(text)
+                words = tokenize(text)
 
                 filtered_words = (word.strip() for word in words)
                 return " ".join(word for word in filtered_words if word)
