@@ -1,9 +1,9 @@
 [project]
 name = "nonebot_plugin_lazytea"
-version = "0.0.1rc1"
+version = "0.0.1"
 description = "适用于nonebot2的GUI"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "beautifulsoup4>=4.13.3",
     "markdown2>=2.5.3",

@@ -185,7 +185,7 @@ async def reocrd_event(bot: Bot, event: Event, session: Uninfo):
             "bot": bot.self_id,
             "content": content_md,
             "userid": user_id,
-            "session": f"{(f'群聊: {group_id}' if group_id is not None else '私信')} | 用户: {session.user.nick or ''} / {user_id}",
+            "session": f"{f"群聊: {group_id}" if group_id is not None else "私信"} | 用户: {session.user.nick or ""} / {user_id}",
             "avatar": avatar,
             "groupid": group_id,
             "time": int(time.time())
@@ -252,7 +252,7 @@ async def handle_api_call(bot: Bot, api: str, data: Dict[str, Any]):
             "api": api,
             "content": content_md,
             "bot": bot.self_id,
-            "session": f"{data.get("group_id", "Unknown")}-{data.get("user_id", "Unknown")}",
+            "session": f'{data.get("group_id", "Unknown")}-{data.get("user_id", "Unknown")}',
             "groupid": data.get("group_id", "Unknown"),
             "time": int(time.time())
         }

@@ -21,7 +21,7 @@ from importlib.resources import files, as_file  # noqa
 
 import nonebot_plugin_localstore    # noqa
 
-__version__ = "0.0.1rc1"
+__version__ = "0.0.1"
 __author__ = "hlfzsi"
 
 try:
@@ -44,7 +44,7 @@ except Exception:
 
 __plugin_meta__ = PluginMetadata(
     name="LazyTea",
-    description="今天也来杯红茶吗?",
+    description="图形化管理您的NoneBot--今天也来杯红茶吗?",
     usage="开箱即用!",
     type="application",
     homepage="https://github.com/hlfzsi/nonebot_plugin_lazytea",

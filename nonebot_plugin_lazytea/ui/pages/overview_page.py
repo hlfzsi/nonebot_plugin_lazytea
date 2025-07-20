@@ -154,13 +154,19 @@ class OverviewPage(PageBase):
         {
             "key": "update_date",
             "title": "更新日期",
-            "content": "2025-7-12",  # 这个日期由开发者手动提供
+            "content": "2025-7-20",  # 这个日期由开发者手动提供
             "dynamic": False
         },
         {
             "key": "developer",
             "title": "开发者",
             "content": os.getenv("UIAUTHOR"),
+        },
+        {
+            "key": "thanks",
+            "title": "鸣谢",
+            "content": "感谢NoneBot成员为本插件审核的付出, 特别感谢<a href='https://github.com/yanyongyu'>@yanyongyu</a>",
+            "is_link": True
         },
         {
             "key": "repository",
@@ -248,6 +254,6 @@ class OverviewPage(PageBase):
         self.worker_thread = None
         self.worker = None
         logger.debug("overview线程停止")
-        
+
     def on_leave(self):
         self._cleanup_worker()
