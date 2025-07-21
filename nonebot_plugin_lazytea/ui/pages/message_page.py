@@ -623,15 +623,14 @@ class MessagePage(PageBase):
 
         elif type_ == "call_api":
             api = data["api"]
-            if api == "send_msg":
+            if api in {"send_msg", "post_c2c_messages", "post_group_messages", "send_message"}:
                 BotToolKit.counter.add_event(bot, "send")
                 segments = data.get("content", [])
                 content_parts = [f"`calling api: {api}`\n"]
                 plaintext_parts = []
                 for seg_type, seg_data in segments:
                     if seg_type == "text":
-                        content_parts.append(seg_data.replace(
-                            "*", r"\*").replace("`", r"\`"))
+                        content_parts.append(seg_data)
                         plaintext_parts.append(seg_data)
                     else:
                         content_parts.append(seg_data)

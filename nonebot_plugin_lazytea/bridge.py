@@ -51,18 +51,21 @@ class UniMessageMarkdownConverter:
             Other: self._handle_other,
         }
 
-    def convert(self, message: UniMessage) -> List[Tuple[str, str]]:
+    def convert(self, message: Union[UniMessage, str]) -> List[Tuple[str, str]]:
         """
         将 UniMessage 转换为 (消息类型, Markdown字符串) 的列表
 
         Args:
-            message: UniMessage 对象
+            message: UniMessage 对象 或 纯文本
 
         Returns:
             包含元组的列表，每个元组格式为 (消息类型, 转换后的Markdown字符串)
         """
         if not message:
             return []
+
+        if isinstance(message, str):
+            return [("text", self._handle_text(Text(message)))]
 
         result = []
         for segment in message:
@@ -246,8 +249,17 @@ async def run_post(bot: Bot, matcher: Matcher, exception: Optional[Exception], s
 async def handle_api_call(bot: Bot, api: str, data: Dict[str, Any]):
     # PR welcome
     # 欢迎贡献你使用的适配器的实现
-    async def send(msg: UniMessage):
-        content_md = markdown_converter.convert(msg)
+    # 实验性支持，目前已尝试支持ob11/QQApi/telegram
+    if api == "send_msg":
+        # ob11
+        if msg := data.get("message"):
+            message_to_send = UniMessage.of(msg)
+        else:
+            logger.warning(f"调用{api}时没有获得message")
+            return
+
+        content_md = markdown_converter.convert(message_to_send)
+
         data_to_send = {
             "api": api,
             "content": content_md,
@@ -258,19 +270,52 @@ async def handle_api_call(bot: Bot, api: str, data: Dict[str, Any]):
         }
         await send_event("call_api", data_to_send)
 
-    # 实验性支持，目前已尝试支持ob11
-    if api == "send_msg":
-        # ob11
-        message_to_send = UniMessage.of(data["message"])
-        await send(message_to_send)
+    elif api in {"post_c2c_messages", "post_group_messages"}:
+        # QQapi 私聊/群聊
+        if msg := data.get("content"):
+            if isinstance(msg, str):
+                content_md = markdown_converter.convert(msg)
+            else:
+                content_md = markdown_converter.convert(UniMessage.of(msg))
+        else:
+            logger.warning(f"调用{api}没有获得content")
+            return
 
-    # elif api == "post_c2c_messages":
-        # QQapi
-        ...
+        user_id = data.get("openid", "Unknown")
+        group_id = data.get("group_openid", "私聊")
 
-    # elif api == "post_group_messages":
-        # QQapi
-        ...
+        data_to_send = {
+            "api": api,
+            "content": content_md,
+            "bot": bot.self_id,
+            "session": f'{user_id}-{group_id}',
+            "groupid": group_id,
+            "time": int(time.time())
+        }
+        await send_event("call_api", data_to_send)
+
+    elif api == "send_message":
+        # telegram
+        if msg := data.get("text"):
+            if isinstance(msg, str):
+                content_md = markdown_converter.convert(msg)
+            else:
+                content_md = markdown_converter.convert(UniMessage.of(msg))
+        else:
+            logger.warning(f"调用{api}没有获得text")
+            return
+
+        union_id = data.get("chat_id", "Unknown")
+
+        data_to_send = {
+            "api": api,
+            "content": content_md,
+            "bot": bot.self_id,
+            "session": union_id,
+            "groupid": union_id,
+            "time": int(time.time())
+        }
+        await send_event("call_api", data_to_send)
 
     else:
         logger.debug(f"未捕获的api调用: {api}\n{data}")
