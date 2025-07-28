@@ -116,7 +116,7 @@ class WriteWorker(QThread):
     def register_tokenizer(self):
         """注册自定义分词器到数据库连接"""
         try:
-            def jieba_tokenize(*args):
+            def _tokenize(*args):
                 if not args or not args[0]:
                     return ""
                 text = str(args[0])
@@ -127,10 +127,10 @@ class WriteWorker(QThread):
                 return " ".join(word for word in filtered_words if word)
 
             self.conn.createscalarfunction(  # type: ignore
-                "cut", jieba_tokenize)
-            logger.info("jieba分词器注册成功")
+                "cut", _tokenize)
+            logger.info("自定义分词器注册成功")
         except Exception as e:
-            logger.error(f"注册jieba分词器失败: {e}")
+            logger.error(f"注册自定义分词器失败: {e}")
 
     def run(self):
         """工作线程主循环"""

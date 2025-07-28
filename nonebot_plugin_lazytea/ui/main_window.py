@@ -499,13 +499,14 @@ class MainWindow(QWidget):
             bg_folder = None
 
             try:
-                from importlib.resources import files, as_file
-                resource_ref = files(__package__).joinpath("resources", "bg")
-                with as_file(resource_ref) as res_path:
+                import importlib.resources
+                resource_ref = importlib.resources.files(__package__).joinpath(
+                    "resources").joinpath("bg")
+                with importlib.resources.as_file(resource_ref) as res_path:
                     if res_path.is_dir():
                         bg_folder = res_path
             except Exception as e:
-                logger.debug(f"从package resources获取失败: {e}")
+                logger.debug(f"从 package resources 获取失败: {e}")
 
             if not bg_folder and getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
                 res_path = Path(getattr(sys, '_MEIPASS', '')) / "resources" / \

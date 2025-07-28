@@ -238,7 +238,7 @@ class PluginCard(QFrame):
 
     def set_update_available(self, latest_version: str):
         """设置更新可用状态"""
-        logger.debug(f"{self.plugin_data.get("name")} 最新版本为 {latest_version}")
+        logger.debug(f"{self.plugin_data.get('name')} 最新版本为 {latest_version}")
         self.latest_version = latest_version
         current_version = self.plugin_data["meta"].get("version", "")
 
@@ -354,7 +354,7 @@ class PluginCard(QFrame):
             return
 
         title = "更新插件"
-        message = f"将更新插件 {formatted_name} 到 v{version.removeprefix("v")}，请确认执行操作.\n更新完成后将弹窗提醒.\n请不要切换页面"
+        message = f"将更新插件 {formatted_name} 到 v{version.removeprefix('v')}，请确认执行操作.\n更新完成后将弹窗提醒.\n请不要切换页面"
 
         reply = MessageBoxBuilder().set_title(title).set_content(
             message).set_icon_type(MessageBoxConfig.IconType.NoIcon).add_button(
@@ -390,7 +390,7 @@ class PluginCard(QFrame):
         if returncode == 0:
 
             MessageBoxBuilder().hide_icon().set_title("更新成功").set_content(
-                f"插件 {formatted_name} 已成功更新到 v{version.removeprefix("v")}\n重启NoneBot以应用更新"
+                f"插件 {formatted_name} 已成功更新到 v{version.removeprefix('v')}\n重启NoneBot以应用更新"
             ).add_button(
                 ButtonConfig(
                     btn_type=MessageBoxConfig.ButtonType.OK,
@@ -460,7 +460,7 @@ class PluginPage(PageBase):
                             card.set_update_available(data["version"])
                         else:
                             logger.debug(
-                                f"{plugin_name} 已经是最新版本 {card.plugin_data.get("meta").get("version")}")
+                                f"{plugin_name} 已经是最新版本 {card.plugin_data.get('meta').get('version')}")
 
     def _load_fonts(self):
         """加载自定义字体"""

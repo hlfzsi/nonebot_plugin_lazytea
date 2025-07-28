@@ -242,7 +242,7 @@ class MessagePage(PageBase):
         self._add_search_bar(self.search_keywords)
 
         escaped_keywords = [
-            f'"{kw.replace("\"", "\"\"")}"' for kw in self.search_keywords]
+            '"{}"'.format(kw.replace('"', '""')) for kw in self.search_keywords]
         fts_query = ' OR '.join(escaped_keywords)
 
         query = f"""

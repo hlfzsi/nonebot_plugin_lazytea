@@ -184,11 +184,15 @@ async def reocrd_event(bot: Bot, event: Event, session: Uninfo):
         unimsg = UniMessage.of(message, bot, bot.adapter.get_name())
         content_md = markdown_converter.convert(unimsg)
 
+        # session
+        group_record = "群聊: " + group_id if group_id is not None else "私信"
+        user_record = f"用户: {session.user.nick or ''} | {user_id}"
+
         data = {
             "bot": bot.self_id,
             "content": content_md,
             "userid": user_id,
-            "session": f"{f"群聊: {group_id}" if group_id is not None else "私信"} | 用户: {session.user.nick or ""} / {user_id}",
+            "session": group_record + " | " + user_record,
             "avatar": avatar,
             "groupid": group_id,
             "time": int(time.time())

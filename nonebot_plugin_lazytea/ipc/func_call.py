@@ -2,7 +2,7 @@ import asyncio
 import importlib
 import sys
 import ujson
-from typing import Any, Dict, List, Set, Type, get_origin
+from typing import Any, Dict, List, Set, Type, Union, get_origin
 from pydantic import BaseModel, ValidationError
 from nonebot.plugin import get_loaded_plugins, get_plugin_by_module_name
 from nonebot import get_plugin_config as nb_config, logger
@@ -14,6 +14,14 @@ from .envhandler import EnvWriter
 from ..utils.roster import FuncTeller
 
 server = Server()
+# 确保 pip 检查和安装过程不会并发执行的锁
+_pip_check_lock = asyncio.Lock()
+# 标记 pip 是否已确认可用
+_pip_available = False
+# 存储当前正在进行更新的插件名称
+_active_updates: Set[str] = set()
+# 保护对 _active_updates 集合的并发读写操作
+_active_updates_lock = asyncio.Lock()
 
 
 def json_config(config: Type[BaseModel]):
@@ -30,6 +38,19 @@ def ujson_default(obj):
     if isinstance(obj, Set):
         return list(obj)
     return "Error"
+
+
+async def _ensure_pip_is_available() -> bool:
+    """
+    一个内部函数，用于实际执行 `ensurepip` 命令来确保 pip 可用。
+    """
+    process = await asyncio.create_subprocess_exec(
+        sys.executable, "-m", "ensurepip", "--upgrade",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    await process.communicate()
+    return process.returncode == 0
 
 
 def _preprocess_data_for_coercion(data: Dict[str, Any], model: Type[BaseModel]) -> Dict[str, Any]:
@@ -151,46 +172,46 @@ async def sync_matchers(new_roster: str):
 
 
 @server.register_handler("update_plugin")
-async def update_plugin(plugin_name: str):
+async def update_plugin(plugin_name: str) -> Union[str, Dict[str, str]]:
+    """
+    异步处理插件更新请求。
+    """
+    global _pip_available
+    if not _pip_available:
+        async with _pip_check_lock:
+            if not _pip_available:
+                if await _ensure_pip_is_available():
+                    _pip_available = True
+                else:
+                    return {"error": "当前环境缺少 pip，尝试自动安装失败！请手动运行 python -m ensurepip --upgrade"}
 
-    async def ensure_pip():
-        """确保当前 Python 环境有 pip"""
+    async with _active_updates_lock:
+        if plugin_name in _active_updates:
+            return {"error": f"插件 {plugin_name} 的更新已在进行中，已忽略本次重复请求。"}
+        _active_updates.add(plugin_name)
+
+    try:
+        pip_index_url = _config.pip_index_url
+        command = [
+            sys.executable, "-m", "pip", "install", "--upgrade",
+            plugin_name, "--index-url", pip_index_url,
+        ]
+
         process = await asyncio.create_subprocess_exec(
-            sys.executable, "-m", "ensurepip", "--upgrade",
+            *command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        await process.communicate()
-        return process.returncode == 0
 
-    if not await ensure_pip():
-        return {"error": "当前环境缺少 pip，尝试自动安装失败！请手动运行 python -m ensurepip --upgrade"}
+        stdout, stderr = await process.communicate()
 
-    pip_index_url = _config.pip_index_url
-
-    command = [
-        sys.executable,
-        "-m",
-        "pip",
-        "install",
-        "--upgrade",
-        plugin_name,
-        "--index-url",
-        pip_index_url,
-    ]
-
-    process = await asyncio.create_subprocess_exec(
-        *command,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-
-    stdout, stderr = await process.communicate()
-
-    if process.returncode == 0:
-        return f"插件 {plugin_name} 更新成功！\n{stdout.decode()}"
-    else:
-        return {"error": f"插件 {plugin_name} 更新失败！\n{stderr.decode()}"}
+        if process.returncode == 0:
+            return f"插件 {plugin_name} 更新成功！\n{stdout.decode(errors='ignore')}"
+        else:
+            return {"error": f"插件 {plugin_name} 更新失败！\n{stderr.decode(errors='ignore')}"}
+    finally:
+        async with _active_updates_lock:
+            _active_updates.discard(plugin_name)
 
 
 @server.register_handler("ui_load")
