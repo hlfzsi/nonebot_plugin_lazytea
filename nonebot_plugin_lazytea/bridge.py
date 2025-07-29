@@ -170,7 +170,7 @@ markdown_converter = UniMessageMarkdownConverter()
 
 
 @event_preprocessor
-async def reocrd_event(bot: Bot, event: Event, session: Uninfo):
+async def record_event(bot: Bot, event: Event, session: Uninfo):
     if bot.self_id in bot_off_line[session.scope]:
         raise IgnoredException(f"{bot.self_id}已经下线")
 

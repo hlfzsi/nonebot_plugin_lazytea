@@ -1,8 +1,7 @@
-import sys
 import ujson
 from typing import Dict, Optional, Tuple, Any
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QTreeWidget,
+    QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QTreeWidget,
     QTreeWidgetItem, QGroupBox, QCheckBox, QListWidget,
     QLabel, QFrame, QScrollArea, QGridLayout, QStackedWidget, QComboBox
 )
@@ -11,7 +10,6 @@ from PySide6.QtGui import QIcon, QFont, QColor, QPixmap
 
 from ...Qcomponents.MessageBox import MessageBoxBuilder, MessageBoxConfig, ButtonConfig
 from ...client import talker, ResponsePayload
-
 from .model import FullConfigModel, MatcherRuleModel, ReadableRoster
 from .things import Style, StyledButton, StyledLineEdit
 
@@ -65,7 +63,10 @@ class PermissionConfigurator(QWidget):
             self._show_placeholder_panel()
         except Exception as e:
             MessageBoxBuilder().set_title("配置错误").set_content(
-                f"无法解析配置数据: {e}").build_and_fetch_result()
+                f"无法解析配置数据: {e}"
+            ).add_button(ButtonConfig(
+                btn_type=MessageBoxConfig.ButtonType.OK, text="好的"
+            )).build_and_fetch_result()
 
     def _init_ui(self) -> None:
         main_layout = QVBoxLayout(self)
@@ -240,7 +241,6 @@ class PermissionConfigurator(QWidget):
 
         is_on = matcher_config.get("is_on", True)
         self.enable_check = QCheckBox("启用此规则")
-        # 沟槽的win11还得特殊适配
         self.enable_check.setStyleSheet(f"""
             QCheckBox {{
                 spacing: 8px; 
@@ -383,7 +383,6 @@ class PermissionConfigurator(QWidget):
             pass
 
     def _perform_filtering(self) -> None:
-        """执行名单过滤，这是您指出的需要实现的方法"""
         text = self.search_edit.text()
         self._filter_list(self.white_list_group.property("user_list"), text)
         self._filter_list(self.white_list_group.property("group_list"), text)
@@ -405,48 +404,81 @@ class PermissionConfigurator(QWidget):
         input_layout.setSpacing(8)
 
         dialog_label = QLabel(f"请输入要添加的 {id_type} ID:")
-        # 我就想不明白了,win11为什么字体默认白色
         dialog_label.setStyleSheet(f"color: {Style.TEXT_COLOR_PRIMARY};")
         input_field = StyledLineEdit()
         input_field.setPlaceholderText(f"例如: 123456789")
 
+        error_label = QLabel()
+        error_label.setStyleSheet(
+            f"color: {Style.DANGER_COLOR}; padding-top: 4px;")
+        error_label.setWordWrap(True)
+        error_label.hide()
+
+        input_field.textChanged.connect(error_label.hide)
+
         input_layout.addWidget(dialog_label)
         input_layout.addWidget(input_field)
+        input_layout.addWidget(error_label)
 
         builder = (
             MessageBoxBuilder()
             .set_title(f"添加 {id_type.capitalize()}")
             .add_custom_widget(input_container)
-            .add_button(ButtonConfig(btn_type=MessageBoxConfig.ButtonType.OK, text="确认", role="primary"))
-            .add_button(ButtonConfig(btn_type=MessageBoxConfig.ButtonType.Cancel, text="取消"))
+            .add_button(ButtonConfig(
+                btn_type=MessageBoxConfig.ButtonType.Custom,
+                text="确认",
+                custom_id="ok_confirm",
+                role="primary",
+                closes_dialog=False
+            ))
+            .add_button(ButtonConfig(
+                btn_type=MessageBoxConfig.ButtonType.Cancel, text="取消"
+            ))
             .hide_icon()
         )
 
         dialog = builder.build()
-        result = dialog.new_exec_()
 
-        if result == MessageBoxConfig.ButtonType.OK:
+        def handle_add_action(button_id: Any):
+            if button_id != "ok_confirm":
+                return
+
             new_id = input_field.text().strip()
+
             if not new_id:
-                MessageBoxBuilder().set_title("输入无效").set_content("ID 不能为空，请重新输入。").set_icon_type(
-                    MessageBoxConfig.IconType.Warning).build_and_fetch_result()
+                error_label.setText("ID 不能为空，请重新输入。")
+                error_label.show()
                 return
 
             config = ReadableRoster.get_config()
             try:
                 permission_list = config["bots"][bot_id]["plugins"][plugin_name][
                     "matchers"][matcher_idx]["permission"][list_type][id_type]
+
                 if new_id in permission_list:
-                    MessageBoxBuilder().set_title("添加失败").set_content(
-                        f"ID '{new_id}' 已存在于列表中。").build_and_fetch_result()
+                    error_label.setText(f"ID '{new_id}' 已存在于列表中。")
+                    error_label.show()
                     return
+
+                error_label.hide()
+
                 permission_list.append(new_id)
                 ReadableRoster.update_config(config)
                 list_widget.addItem(new_id)
                 list_widget.scrollToBottom()
+
+                dialog.accept()
+
             except (KeyError, IndexError) as e:
                 MessageBoxBuilder().set_title("内部错误").set_content(
-                    f"更新配置时发生错误: {e}").build_and_fetch_result()
+                    f"更新配置时发生错误: {e}"
+                ).add_button(ButtonConfig(
+                    btn_type=MessageBoxConfig.ButtonType.OK, text="好的"
+                )).build_and_fetch_result()
+                dialog.reject()
+
+        dialog.buttonClicked.connect(handle_add_action)
+        dialog.exec()
 
     def _remove_from_list(self, list_widget: QListWidget, list_type: str, id_type: str, bot_id: str, plugin_name: str, matcher_idx: int):
         selected_items = list_widget.selectedItems()
@@ -476,10 +508,12 @@ class PermissionConfigurator(QWidget):
 
     def _on_save_error(self, result: ResponsePayload) -> None:
         MessageBoxBuilder().set_title("保存失败").set_content(
-            f"未能保存配置：\n{result.error}").build_and_fetch_result()
+            f"未能保存配置：\n{result.error}"
+        ).add_button(ButtonConfig(
+            btn_type=MessageBoxConfig.ButtonType.OK, text="好的"
+        )).build_and_fetch_result()
 
     def test_permission(self) -> None:
-        """权限测试工具"""
         dialog_container = QWidget()
         layout = QVBoxLayout(dialog_container)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -494,7 +528,6 @@ class PermissionConfigurator(QWidget):
         group_edit = StyledLineEdit()
         group_edit.setPlaceholderText("选填, 私聊请留空")
 
-        # 将控件添加到布局
         form_layout = QGridLayout()
         form_layout.setSpacing(10)
         form_layout.addWidget(QLabel("机器人:"), 0, 0)
@@ -551,7 +584,7 @@ class PermissionConfigurator(QWidget):
                 return
 
             is_allowed = ReadableRoster.check(
-                bot_id, plugin_name, matcher_key, userid, groupid)  
+                bot_id, plugin_name, matcher_key, userid, groupid)
             if is_allowed:
                 result_label.setText("✅  权限检查通过: 允许访问")
                 result_label.setStyleSheet(
@@ -586,9 +619,7 @@ class PermissionConfigurator(QWidget):
         )
 
         dialog = builder.build()
-
         dialog.buttonClicked.connect(handle_dialog_clicks)
-
         dialog.exec()
 
     def resizeEvent(self, event) -> None:
@@ -596,58 +627,3 @@ class PermissionConfigurator(QWidget):
         total_width = self.splitter.width()
         left_width = min(400, max(250, int(total_width * 0.3)))
         self.splitter.setSizes([left_width, total_width - left_width])
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-
-    example_config: FullConfigModel = {
-        "bots": {
-            "bot_123": {
-                "plugins": {
-                    "admin": {
-                        "matchers": [
-                            {
-                                "rule": {"commands": [["status"], ["state"]]},
-                                "permission": {"white_list": {"user": ["user1"], "group": []}, "ban_list": {"user": [], "group": []}},
-                                "is_on": True
-                            },
-                            {
-                                "rule": {"keywords": ["你好"]},
-                                "permission": {"white_list": {"user": [], "group": []}, "ban_list": {"user": ["user_bad"], "group": []}},
-                                "is_on": False
-                            }
-                        ]
-                    },
-                    "fun": {
-                        "matchers": [
-                            {
-                                "rule": {"startswith": ["!echo"]},
-                                "permission": {"white_list": {"user": [], "group": ["group_fun"]}, "ban_list": {"user": [], "group": []}},
-                                "is_on": True
-                            }
-                        ]
-                    }
-                }
-            },
-            "bot_456": {
-                "plugins": {
-                    "utility": {
-                        "matchers": [
-                            {
-                                "rule": {"regex_patterns": [r"calc\s+(.*)"]},
-                                "permission": {"white_list": {"user": [], "group": []}, "ban_list": {"user": [], "group": []}},
-                                "is_on": True
-                            }
-                        ]
-                    }
-                }
-            }
-        }
-    }
-
-    window = PermissionConfigurator(initial_config=example_config)
-    window.setMinimumSize(900, 600)
-    window.setWindowTitle("权限配置器")
-    window.show()
-    sys.exit(app.exec())

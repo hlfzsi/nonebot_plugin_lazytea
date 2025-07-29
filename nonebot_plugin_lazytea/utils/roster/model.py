@@ -230,14 +230,12 @@ class PluginMatchers(BaseModel):
         if matcher_info is None:
             return True
         if not matcher_info.is_on:
-            # 开关关闭状态 - 检查白名单
-            white_list = self.default_permission["white_list"]
+            white_list = matcher_info.permission["white_list"]
             if (user_id in white_list["user"] or
                     (group_id and group_id in white_list["group"])):
                 return True
             return False
         else:
-            # 开关开启状态 - 检查黑名单
             ban_list = matcher_info.permission["ban_list"]
             if (user_id in ban_list["user"] or
                     (group_id and group_id in ban_list["group"])):
@@ -247,6 +245,17 @@ class PluginMatchers(BaseModel):
     def rebuild_rule_mapping(self) -> None:
         """重建规则映射关系"""
         self.rule_mapping = {hash(info.rule): info for info in self.matchers}
+
+    def add_matcher(self, matcher_info: MatcherInfo):
+        """安全地添加一个 matcher 并更新映射"""
+        self.matchers.add(matcher_info)
+        self.rebuild_rule_mapping()
+
+    def remove_matcher(self, matcher_info: MatcherInfo):
+        """安全地移除一个 matcher 并更新映射"""
+        if matcher_info in self.matchers:
+            self.matchers.remove(matcher_info)
+            self.rebuild_rule_mapping()
 
 
 class BotPlugins(BaseModel):
@@ -324,9 +333,7 @@ class MatcherRuleModel(BaseModel):
                 for matcher in matcher_set:
                     rule_data = RuleData.extract_rule(matcher)
                     matcher_info = MatcherInfo(rule=rule_data)
-                    plugin_matchers.matchers.add(matcher_info)
-
-                plugin_matchers.rebuild_rule_mapping()
+                    plugin_matchers.add_matcher(matcher_info)
                 bot_plugins.plugins[plugin_name] = plugin_matchers
 
             model.bots[bot_id] = bot_plugins

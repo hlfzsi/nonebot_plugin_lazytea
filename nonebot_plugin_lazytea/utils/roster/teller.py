@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 import aiofiles
 from typing import Dict, Optional, Set
@@ -13,15 +14,17 @@ from .model import MatcherRuleModel, BotPlugins, PluginMatchers
 class FuncTeller:
     path: Optional[Path] = None
     data: Optional[MatcherRuleModel] = None
+    _lock = asyncio.Lock()
 
     @classmethod
     async def sync(cls, data_json: str) -> None:
-        try:
-            cls.data = MatcherRuleModel.from_json(data_json)
-            await cls.save(cls.data)
-        except:
-            import traceback
-            traceback.print_exc()
+        async with cls._lock:
+            try:
+                cls.data = MatcherRuleModel.from_json(data_json)
+                await cls._save_nolock(cls.data)
+            except Exception:
+                import traceback
+                traceback.print_exc()
 
     @classmethod
     def get_matchers(cls) -> MatcherRuleModel:
@@ -51,7 +54,7 @@ class FuncTeller:
         return MatcherRuleModel.from_matchers(raw_matchers)
 
     @classmethod
-    async def save(cls, data: MatcherRuleModel) -> None:
+    async def _save_nolock(cls, data: MatcherRuleModel) -> None:
         """保存数据到文件"""
         if cls.path is None:
             cls.path = get_plugin_data_dir() / "perm.json"
@@ -62,7 +65,7 @@ class FuncTeller:
             await f.write(data.model_dump_json(indent=4))
 
     @classmethod
-    async def load(cls) -> MatcherRuleModel:
+    async def _load_nolock(cls) -> MatcherRuleModel:
         """从文件加载数据
 
         Returns:
@@ -84,9 +87,9 @@ class FuncTeller:
             return MatcherRuleModel()
 
     @classmethod
-    async def init_model(cls) -> MatcherRuleModel:
-        """初始化规则模型"""
-        file_data = await cls.load()
+    async def _init_and_merge_nolock(cls) -> MatcherRuleModel:
+        """初始化并合并规则模型"""
+        file_data = await cls._load_nolock()
         current_data = cls.get_matchers()
         merged_data = MatcherRuleModel()
 
@@ -97,11 +100,10 @@ class FuncTeller:
                 merged_plugin = PluginMatchers()
 
                 file_bot_plugins = file_data.bots.get(bot_id, None)
+                file_plugin = None
                 if isinstance(file_bot_plugins, BotPlugins):
                     file_plugin = file_bot_plugins.plugins.get(
                         plugin_name, None)
-                else:
-                    file_plugin = None
 
                 file_rule_infos = {}
                 if file_plugin:
@@ -111,12 +113,10 @@ class FuncTeller:
                             "is_on": matcher_info.is_on
                         }
 
-                # 合并当前规则
                 for current_info in plugin_matchers.matchers:
                     rule_hash = hash(current_info.rule)
                     merged_info = current_info.model_copy(deep=True)
 
-                    # 如果文件中有相同规则，继承权限和开关状态
                     if rule_hash in file_rule_infos:
                         file_info = file_rule_infos[rule_hash]
                         merged_info.permission = file_info["permission"]
@@ -127,11 +127,27 @@ class FuncTeller:
                 merged_plugin.rebuild_rule_mapping()
                 merged_data.bots[bot_id].plugins[plugin_name] = merged_plugin
 
-        await cls.save(merged_data)
+        await cls._save_nolock(merged_data)
         return merged_data
 
     @classmethod
+    async def init_model(cls) -> MatcherRuleModel:
+        """
+        强制重新初始化规则模型，合并现有配置并保存
+        """
+        async with cls._lock:
+            cls.data = await cls._init_and_merge_nolock()
+            return cls.data
+
+    @classmethod
     async def get_model(cls) -> MatcherRuleModel:
-        if not cls.data:
-            cls.data = await cls.init_model()
+        """
+        获取规则模型，如果模型未初始化，则先进行初始化
+        """
+        if cls.data:
+            return cls.data
+
+        async with cls._lock:
+            if cls.data is None:
+                cls.data = await cls._init_and_merge_nolock()
         return cls.data
