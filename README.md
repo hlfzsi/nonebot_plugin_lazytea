@@ -1,6 +1,17 @@
 # 懒人茶 (LazyTea) - 为您的 NoneBot2 献上一杯悠闲的下午茶
 
-*——来喝一杯下午茶，享受片刻的宁静与高效？
+如果喜欢本项目，请点击右上角的star。每一个star都是我们的动力。
+
+[![PyPI](https://img.shields.io/pypi/v/nonebot_plugin_lazytea.svg)](https://pypi.org/project/nonebot_plugin_lazytea/)
+![alt text](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)
+[![GitHub stars](https://img.shields.io/github/stars/hlfzsi/nonebot_plugin_lazytea?style=social)](https://github.com/hlfzsi/nonebot_plugin_lazytea)
+![Star History](https://api.star-history.com/svg?repos=hlfzsi/nonebot_plugin_lazytea,hlfzsi/nonebot_plugin_lazytea_shell_extension&type=Date)
+
+**相关链接：**
+
+* [nonebot_plugin_lazytea_shell_extension](https://github.com/hlfzsi/nonebot_plugin_lazytea_shell_extension/)：为LazyTea启用命令管理，允许通过聊天消息管理权限。
+
+——来喝一杯下午茶，享受片刻的宁静与高效？
 
 **LazyTea** 是一款为 [NoneBot2](https://nonebot.dev/) 精心打造的本地图形化界面（GUI），让您以更直观、更优雅的方式管理您的机器人。
 
@@ -79,15 +90,15 @@ LazyTea的版本管理遵循PEP 440标准。
 
 **本项目版本号的递增逻辑**：
 
-* **修订号**：修正bug，改进用户体验以及部分逻辑的完善
-* **次版本号**：引入需要一定时间进行验证的较大的功能
-* 版本号：项目重构
+- **修订号**：修正bug，改进用户体验以及部分逻辑的完善
+- **次版本号**：引入需要一定时间进行验证的较大的功能
+- 版本号：项目重构
 
 通常而言，每一个 次版本号 的正式发布需要经过1\~2次Alpha版本，0\~2次Beta版本和一次rc版本。
 
-* Alpha：完成新功能的实现，尽可能确保逻辑正确
-* Beta：修正错误，解决边界情况，美化新功能
-* rc：验证稳定性与最终的发布前排错
+- Alpha：完成新功能的实现，尽可能确保逻辑正确
+- Beta：修正错误，解决边界情况，美化新功能
+- rc：验证稳定性与最终的发布前排错
 
 由于精力有限，新版本的Alpha发布代表着上一版本停止修订。
 
@@ -121,39 +132,38 @@ LazyTea的版本管理遵循PEP 440标准。
 
 您可以为您的插件打造专属的配置页面，以替代 LazyTea 自动生成的页面。
 
-* **技术栈要求**: 自定义 UI 必须使用 PySide6 以确保兼容性。
-* **启用开关**: 必须在元数据中将 ui_support 设为 True。
-* **解耦设计**: 我们设计了分离式导入机制。这意味着您的插件无需将 LazyTea 作为强制依赖。当用户安装了 LazyTea 时，UI 会自动加载；反之，您的插件将以无UI模式正常运行，不产生任何额外开销。
+- **技术栈要求**: 自定义 UI 必须使用 PySide6 以确保兼容性。
+- **启用开关**: 必须在元数据中将 ui_support 设为 True。
+- **解耦设计**: 我们设计了分离式导入机制。这意味着您的插件无需将 LazyTea 作为强制依赖。当用户安装了 LazyTea 时，UI 会自动加载；反之，您的插件将以无UI模式正常运行，不产生任何额外开销。
 
 包顶层的`__init__.py`您可以按照习惯进行编写，不需要特殊适配。这是因为LazyTea在导入时会自动注入包顶层的虚假模块，使得Python跳过`__init__.py`的初始化操作。
 
-在您插件包的顶层目录（**init**.py 所在目录），创建以下两个文件，LazyTea 将会自动发现并加载它们：
+在您插件包的顶层目录（`__init__.py` 所在目录），创建以下两个文件，LazyTea 将会自动发现并加载它们：
 
 #### `__call__.py`
 
-* **导入时机**: GUI 加载完成，**ui**.py 导入之前。
-* **运行环境**: 主进程，Async Loop。
-* **可用 SDK**: from nonebot_plugin_lazytea.sdk import SDK_nb
-* **描 述**: 您可以在此编写与 NoneBot2 主体交互的代码，无任何限制。
+- **导入时机**: GUI 加载完成，**ui**.py 导入之前。
+- **运行环境**: 主进程，Async Loop。
+- **可用 SDK**: from nonebot_plugin_lazytea.sdk import SDK_nb
+- **描 述**: 您可以在此编写与 NoneBot2 主体交互的代码，无任何限制。
+- 配置钩子：**您可以选择性地提供一个与您插件**包**导入名**同名的函数。当插件的配置被更新时，LazyTea会自动调用这个函数，并将**包含了所有最新配置值的配置实例作为唯一的参数**进行传递。这允许了插件配置热重载。
 
 #### `__ui__.py`
 
-* **导入时机**: **call**.py 导入完成之后。
-* **运行环境:** GUI 子进程，QEventLoop。
-* **可用 SDK:** from nonebot_plugin_lazytea.ui.sdk import SDK_UI
-* **描 述**: 该文件负责 UI 的构建与交互。
-* **重要**: 此文件不应包含或依赖任何 asyncio 或 nonebot 相关代码。async/await 关键字在此不可用。所有与主进程的通信都应通过我们提供的 IPC 接口完成。
-* **入口类**: 定义一个名为 ShowMyPlugin 的类，继承自 QWidget。其构造函数应仅接受 parent 参数。LazyTea 将自动实例化这个类，并将其作为您的插件页面展示给用户。
+- **导入时机**: **call**.py 导入完成之后。
+- **运行环境:** GUI 子进程，QEventLoop。
+- **可用 SDK:** from nonebot_plugin_lazytea.ui.sdk import SDK_UI
+- **描 述**: 该文件负责 UI 的构建与交互。
+- **重要**: 此文件不应包含或依赖任何 asyncio 或 nonebot 相关代码。async/await 关键字在此不可用。所有与主进程的通信都应通过我们提供的 IPC 接口完成。
+- **入口类**: 定义一个名为 ShowMyPlugin 的类，继承自 QWidget。其构造函数应仅接受 parent 参数。LazyTea 将自动实例化这个类，并将其作为您的插件页面展示给用户。
 
 # 开发蓝图
 
-* [X]  ~~**赋能开发者**: 我们正致力于为插件开发者提供更完整、更便捷的接口，让您的插件能与 LazyTea 无缝协作，创造更多可能。~~
-* [ ]  **极致性能**: 降低内存占用始终是我们的核心目标之一。尽管挑战重重，我们仍将持续优化，为您提供更轻快的体验。
+- [X]  ~~**赋能开发者**: 我们正致力于为插件开发者提供更完整、更便捷的接口，让您的插件能与 LazyTea 无缝协作，创造更多可能。~~
+- [ ]  **极致性能**: 降低内存占用始终是我们的核心目标之一。尽管挑战重重，我们仍将持续优化，为您提供更轻快的体验。
 
 随着功能迭代，LazyTea 的资源占用可能会有增长趋势。我们会努力平衡功能与性能，并由您自行决定是否更新到最新版本。
 
 ---
 
 *“在快节奏的世界里，LazyTea 愿为您留出一片宁静的角落，轻松管理，高效生活。”*
-
----
