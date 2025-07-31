@@ -19,6 +19,7 @@ from PySide6.QtCore import (
     Qt, QSize, QPropertyAnimation, QEasingCurve, QPoint,
     QParallelAnimationGroup, QEvent, Signal, QPointF, QRectF, QTimer
 )
+
 from .pages.background.start import PluginInit
 from .pages import OverviewPage, BotInfoPage, MessagePage, PageBase, PluginPage
 from .pages.background.plugin_recorder import Recorder

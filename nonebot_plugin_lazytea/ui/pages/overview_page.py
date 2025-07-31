@@ -10,7 +10,6 @@ from .utils.version_check import VersionUtils
 from .utils.Qcomponents.networkmanager import ReleaseNetworkManager
 from .utils.tealog import logger
 
-
 class VersionCheckWorker(QObject):
     version_result = Signal(str, str)
 
@@ -136,7 +135,6 @@ class CardManager(QObject):
 
     def update_content(self, key: str, content: str):
         self.updateSignal.emit(key, content)
-
 
 class OverviewPage(PageBase):
     """概览页面"""

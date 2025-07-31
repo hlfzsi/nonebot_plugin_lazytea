@@ -39,7 +39,7 @@ class BotCard(QFrame):
 
     @property
     def original_theme_color(self):
-        return QColor(BotToolKit.color.get(self.bot_id, "#6A11CB"))
+        return QColor(BotToolKit.color.get(self.bot_id))
 
     def _init_style(self):
         self.setMinimumSize(280, 220)

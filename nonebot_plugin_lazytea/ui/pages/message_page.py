@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (QVBoxLayout, QHBoxLayout, QCheckBox, QListWidget,
 from .utils.client import talker
 from .utils.token import tokenize
 from .utils.BotTools import BotToolKit
-from .utils.Qcomponents.networkmanager import BubbleNetworkManager
 from .utils.conn import get_database, AsyncQuerySignal
 from .Bubble.MessageBubble import MessageBubble, MetadataType
 from .utils.tealog import logger
@@ -96,7 +95,6 @@ class MessagePage(PageBase):
         # 状态枚举: 显示中、隐藏、搜索中、加载更早消息、进入页面拉取消息
         self.state: Literal["on_show", "hidden", "searching",
                             "loading_earlier", "loading"] = "hidden"
-        self.qnam = BubbleNetworkManager().qnam
 
         # 时间戳范围追踪
         self.earliest_loaded_ts = None  # 当前加载的最早时间戳
@@ -181,7 +179,7 @@ class MessagePage(PageBase):
             item = QListWidgetItem()
             bubble = MessageBubble(meta, content,
                                    BotToolKit.color.get(bot),
-                                   self.list_widget, item, self.qnam)
+                                   self.list_widget, item)
             self.list_widget.insertItem(0, item)
             self.list_widget.setItemWidget(item, bubble)
 
@@ -212,11 +210,12 @@ class MessagePage(PageBase):
     def _clear_message_list(self):
         """
         清空消息列表。
-        必须手动遍历并使用 deleteLater() 删除。
+        必须手动遍历、获取控件、然后销毁。
         """
         while self.list_widget.count() > 0:
-            item = self.list_widget.takeItem(0)
+            item = self.list_widget.item(0)
             widget = self.list_widget.itemWidget(item)
+            self.list_widget.takeItem(0)
             if widget:
                 if isinstance(widget, MessageBubble):
                     widget.cleanup()
@@ -387,6 +386,7 @@ class MessagePage(PageBase):
         self.list_widget.setVerticalScrollBar(ModernScrollBar())
         self.list_widget.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
         self.list_widget.setStyleSheet("""
             QListWidget { 
                 background: transparent; 
@@ -576,7 +576,7 @@ class MessagePage(PageBase):
 
         item = QListWidgetItem()
         bubble = MessageBubble(metadata, content, accent_color,
-                               self.list_widget, item, self.qnam)
+                               self.list_widget, item)
         self.list_widget.addItem(item)
         self.list_widget.setItemWidget(item, bubble)
 
@@ -597,7 +597,7 @@ class MessagePage(PageBase):
         avatar = data.get("avatar")
 
         metadata = {
-            "bot": ("bot", "color: {bot_color}; font-weight: bold;"),
+            "bot": ("{bot}", "color: {bot_color}; font-weight: bold;"),
             "time": (timestamps, "color: #757575; font-size: 12px;"),
             "session": (f"会话：{data.get('session', '')}", "color: #616161; font-style: italic;"),
             "avatar": (avatar, MessageBubble.AvatarPosition.LEFT_OUTSIDE),
@@ -623,6 +623,8 @@ class MessagePage(PageBase):
 
         elif type_ == "call_api":
             api = data["api"]
+            metadata["avatar"] = (
+                avatar, MessageBubble.AvatarPosition.RIGHT_OUTSIDE)
             if api in {"send_msg", "post_c2c_messages", "post_group_messages", "send_message"}:
                 BotToolKit.counter.add_event(bot, "send")
                 segments = data.get("content", [])
@@ -645,7 +647,7 @@ class MessagePage(PageBase):
 
         groupid = data.get("groupid") or "私聊"
         self.insert(type_, [userid, groupid, bot,
-                    timestamps, content, metadata, plaintext])
+                    timestamps, content, metadata.copy(), plaintext])
 
     def insert(self, type_: str, params: List):
         """插入消息到数据库"""

@@ -13,13 +13,38 @@ from nonebot_plugin_alconna.uniseg.segment import (
     Reply, Reference,
     Hyper, Button, Keyboard, Other, I18n
 )
-from nonebot_plugin_uninfo import Uninfo
+from nonebot_plugin_uninfo import Uninfo, get_interface
 from nonebot_plugin_uninfo.adapters import alter_get_fetcher
 from .utils.commute import send_event, bot_off_line
 from .utils.parse import get_function_fingerprint
 from .utils.roster import FuncTeller, RuleData
 
 driver = get_driver()
+
+
+_bot_avatar_cache = {}
+
+
+async def fetch_bot_avatar(bot: Bot) -> Optional[str]:
+    bot_id = bot.self_id
+    if bot_id in _bot_avatar_cache:
+        return _bot_avatar_cache[bot_id]
+
+    try:
+        avatar = None
+        interface = get_interface(bot)
+        if interface:
+            bot_user = await interface.get_user(bot_id)
+            avatar = bot_user.avatar if bot_user else None
+        _bot_avatar_cache[bot_id] = avatar
+        return avatar
+    except Exception as e:
+        logger.error(f"获取{bot_id}的头像时出现错误{e}")
+        return None
+
+
+def get_bot_avatar(bot_id: str) -> Optional[str]:
+    return _bot_avatar_cache.get(bot_id)
 
 
 class UniMessageMarkdownConverter:
@@ -254,6 +279,8 @@ async def handle_api_call(bot: Bot, api: str, data: Dict[str, Any]):
     # PR welcome
     # 欢迎贡献你使用的适配器的实现
     # 实验性支持，目前已尝试支持ob11/QQApi/telegram
+    avatar = get_bot_avatar(bot.self_id)
+
     if api == "send_msg":
         # ob11
         if msg := data.get("message"):
@@ -270,7 +297,8 @@ async def handle_api_call(bot: Bot, api: str, data: Dict[str, Any]):
             "bot": bot.self_id,
             "session": f'{data.get("group_id", "Unknown")}-{data.get("user_id", "Unknown")}',
             "groupid": data.get("group_id", "Unknown"),
-            "time": int(time.time())
+            "time": int(time.time()),
+            "avatar": avatar
         }
         await send_event("call_api", data_to_send)
 
@@ -294,7 +322,8 @@ async def handle_api_call(bot: Bot, api: str, data: Dict[str, Any]):
             "bot": bot.self_id,
             "session": f'{user_id}-{group_id}',
             "groupid": group_id,
-            "time": int(time.time())
+            "time": int(time.time()),
+            "avatar": avatar
         }
         await send_event("call_api", data_to_send)
 
@@ -317,7 +346,8 @@ async def handle_api_call(bot: Bot, api: str, data: Dict[str, Any]):
             "bot": bot.self_id,
             "session": union_id,
             "groupid": union_id,
-            "time": int(time.time())
+            "time": int(time.time()),
+            "avatar": avatar
         }
         await send_event("call_api", data_to_send)
 
@@ -336,6 +366,7 @@ async def handle_api_call(bot: Bot, api: str, data: Dict[str, Any]):
 @driver.on_bot_connect
 async def track_connect(bot: Bot):
     basefetcher = alter_get_fetcher(bot.adapter.get_name())
+    await fetch_bot_avatar(bot)
     if not basefetcher:
         logger.warning(f"不受支持的适配器{bot.adapter.get_name()}")
         return

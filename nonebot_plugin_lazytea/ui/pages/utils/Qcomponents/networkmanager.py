@@ -6,14 +6,19 @@ from PySide6.QtNetwork import QNetworkAccessManager, QNetworkDiskCache, QNetwork
 
 from ..tealog import logger
 
-
 QNETWORK_ACCESS_MANAGER = None
+QNETWORK_ACCESS_MANAGER_LOCK = threading.Lock()
 
 
 def get_network_manager():
+    """
+    获取全局的 QNetworkAccessManager 实例。
+    """
     global QNETWORK_ACCESS_MANAGER
-    if not QNETWORK_ACCESS_MANAGER:
-        QNETWORK_ACCESS_MANAGER = QNetworkAccessManager()
+    if QNETWORK_ACCESS_MANAGER is None:
+        with QNETWORK_ACCESS_MANAGER_LOCK:
+            if QNETWORK_ACCESS_MANAGER is None:
+                QNETWORK_ACCESS_MANAGER = QNetworkAccessManager()
     return QNETWORK_ACCESS_MANAGER
 
 
@@ -31,9 +36,11 @@ class BubbleNetworkManager(QObject):
 
     def __init__(self):
         if not self._initialized:
-            super().__init__()
-            self._init_manager()
-            self._initialized = True
+            with self.__class__._lock:
+                if not self._initialized:
+                    super().__init__()
+                    self._init_manager()
+                    self._initialized = True
 
     def _init_manager(self):
         self.manager = get_network_manager()
@@ -70,12 +77,14 @@ class ReleaseNetworkManager(QObject):
         return cls._instance
 
     def __init__(self):
-        if not getattr(self, '_is_initialized', False):
-            super().__init__()
-            self.nam = get_network_manager()
-            self._execute_request.connect(
-                self._execute_get_github_release)
-            self._is_initialized = True
+        if not self._initialized:
+            with self.__class__._lock:
+                if not self._initialized:
+                    super().__init__()
+                    self.nam = get_network_manager()
+                    self._execute_request.connect(
+                        self._execute_get_github_release)
+                    self._initialized = True
 
     def get_github_release(self, owner: str, repo: str, plugin_name: str):
         """获取GitHub release信息"""
