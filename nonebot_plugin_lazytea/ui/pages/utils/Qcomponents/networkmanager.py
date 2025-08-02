@@ -1,10 +1,8 @@
 import os
 import ujson
 import threading
-from PySide6.QtCore import QObject, QStandardPaths, QDir, Signal, QUrl
-from PySide6.QtNetwork import QNetworkAccessManager, QNetworkDiskCache, QNetworkRequest, QNetworkReply
-
-from ..tealog import logger
+from PySide6.QtCore import QObject, Signal, QUrl
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 
 QNETWORK_ACCESS_MANAGER = None
 QNETWORK_ACCESS_MANAGER_LOCK = threading.Lock()
@@ -20,44 +18,6 @@ def get_network_manager():
             if QNETWORK_ACCESS_MANAGER is None:
                 QNETWORK_ACCESS_MANAGER = QNetworkAccessManager()
     return QNETWORK_ACCESS_MANAGER
-
-
-class BubbleNetworkManager(QObject):
-    _instance = None
-    _lock = threading.Lock()
-    _initialized = False
-
-    def __new__(cls):
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-        return cls._instance
-
-    def __init__(self):
-        if not self._initialized:
-            with self.__class__._lock:
-                if not self._initialized:
-                    super().__init__()
-                    self._init_manager()
-                    self._initialized = True
-
-    def _init_manager(self):
-        self.manager = get_network_manager()
-
-        cache = QNetworkDiskCache()
-        cache_dir = os.getenv("UIDATADIR") or QStandardPaths.writableLocation(
-            QStandardPaths.StandardLocation.CacheLocation
-        )
-        logger.debug(f"GUI资源缓存路径 {cache_dir}")
-        QDir().mkpath(cache_dir)
-        cache.setCacheDirectory(cache_dir)
-        cache.setMaximumCacheSize(100 * 1024 * 1024)  # 100 MB
-        self.manager.setCache(cache)
-
-    @property
-    def qnam(self):
-        return self.manager
 
 
 class ReleaseNetworkManager(QObject):

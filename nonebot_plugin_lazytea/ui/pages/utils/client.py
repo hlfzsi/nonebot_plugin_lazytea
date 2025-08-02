@@ -343,6 +343,31 @@ class MessageHandler(QObject):
                     else:
                         raise e
 
+    def fake_message(
+        self,
+        msg_type: str,
+        payload: Dict[str, Any],
+        correlation_id: Optional[str] = None
+    ) -> None:
+        """
+        伪造一个来自服务端的消息并进行分发。
+
+        Args:
+            msg_type (str): 消息类型。
+            payload (Dict[str, Any]): 消息的载荷。
+            correlation_id (Optional[str], optional): 如果要模拟对某个请求的响应，
+                                                    请提供原始请求的 msg_id。
+                                                    默认为 None。
+        """
+
+        header = MessageHeader(
+            msg_id=f"fake-{uuid.uuid4()}",
+            msg_type=msg_type,
+            timestamp=time.time(),
+            correlation_id=correlation_id
+        )
+        self.sort_data(header, payload)
+
     def _handle_response(self, msg_id: str, payload: Dict):
         with QMutexLocker(self._requests_mutex):
             if msg_id not in self._pending_requests:
@@ -372,6 +397,32 @@ class MessageHandler(QObject):
         with QMutexLocker(self._subscriptions_mutex):
             for type_ in types:
                 self.signal_dict[type_].append(signal)
+
+    def unsubscribe(self, signal: SignalInstance, *types: str) -> None:
+        """
+        取消订阅消息。这一操作相对昂贵, 大部分场景下不需要使用, `MessageHandler`自身会处理失效的信号。
+
+        Args:
+            signal (SignalInstance): 要取消订阅的信号实例。
+            *types (str): 可选参数。要取消订阅的特定消息类型。
+                          如果未提供，则会从所有消息类型中移除该信号。
+        """
+        with QMutexLocker(self._subscriptions_mutex):
+            if not types:
+                for type_key in list(self.signal_dict.keys()):
+                    while signal in self.signal_dict[type_key]:
+                        self.signal_dict[type_key].remove(signal)
+
+                    if not self.signal_dict[type_key]:
+                        del self.signal_dict[type_key]
+            else:
+                for type_ in types:
+                    if type_ in self.signal_dict:
+                        while signal in self.signal_dict[type_]:
+                            self.signal_dict[type_].remove(signal)
+
+                        if not self.signal_dict[type_]:
+                            del self.signal_dict[type_]
 
 
 # 全局实例

@@ -1,4 +1,5 @@
 import time
+from threading import Lock
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 from nonebot import get_driver, logger
 from nonebot.typing import T_State
@@ -22,29 +23,33 @@ from .utils.roster import FuncTeller, RuleData
 driver = get_driver()
 
 
-_bot_avatar_cache = {}
+_bot_avatar_cache: Dict[str, Optional[str]] = {}
+_bot_avatar_cache_lock = Lock()
 
 
 async def fetch_bot_avatar(bot: Bot) -> Optional[str]:
     bot_id = bot.self_id
-    if bot_id in _bot_avatar_cache:
-        return _bot_avatar_cache[bot_id]
+    with _bot_avatar_cache_lock:
+        if bot_id in _bot_avatar_cache:
+            return _bot_avatar_cache[bot_id]
 
+    avatar = None
     try:
-        avatar = None
         interface = get_interface(bot)
         if interface:
             bot_user = await interface.get_user(bot_id)
             avatar = bot_user.avatar if bot_user else None
-        _bot_avatar_cache[bot_id] = avatar
-        return avatar
     except Exception as e:
-        logger.error(f"获取{bot_id}的头像时出现错误{e}")
-        return None
+        logger.error(f"获取 {bot_id} 的头像时出现错误: {e}")
+
+    with _bot_avatar_cache_lock:
+        _bot_avatar_cache[bot_id] = avatar
+    return avatar
 
 
 def get_bot_avatar(bot_id: str) -> Optional[str]:
-    return _bot_avatar_cache.get(bot_id)
+    with _bot_avatar_cache_lock:
+        return _bot_avatar_cache.get(bot_id)
 
 
 class UniMessageMarkdownConverter:

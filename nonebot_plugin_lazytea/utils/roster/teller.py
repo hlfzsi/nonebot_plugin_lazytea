@@ -27,7 +27,7 @@ class FuncTeller:
                 traceback.print_exc()
 
     @classmethod
-    def get_matchers(cls) -> MatcherRuleModel:
+    async def _get_matchers_nolock(cls) -> MatcherRuleModel:
         """获取所有插件的匹配器信息
 
         收集内容包括：
@@ -36,8 +36,6 @@ class FuncTeller:
         - 匹配器规则(RuleData)
         - 权限配置(白名单/黑名单)
         """
-        if cls.path is None:
-            cls.path = get_plugin_data_dir() / "perm.json"
 
         plugins = get_loaded_plugins()
         plugins = sorted(plugins, key=lambda plugin: plugin.name.lower())
@@ -90,7 +88,11 @@ class FuncTeller:
     async def _init_and_merge_nolock(cls) -> MatcherRuleModel:
         """初始化并合并规则模型"""
         file_data = await cls._load_nolock()
-        current_data = cls.get_matchers()
+
+        if cls.path is None:
+            cls.path = get_plugin_data_dir() / "perm.json"
+
+        current_data = await cls._get_matchers_nolock()
         merged_data = MatcherRuleModel()
 
         for bot_id, bot_plugins in current_data.bots.items():
@@ -129,15 +131,6 @@ class FuncTeller:
 
         await cls._save_nolock(merged_data)
         return merged_data
-
-    @classmethod
-    async def init_model(cls) -> MatcherRuleModel:
-        """
-        强制重新初始化规则模型，合并现有配置并保存
-        """
-        async with cls._lock:
-            cls.data = await cls._init_and_merge_nolock()
-            return cls.data
 
     @classmethod
     async def get_model(cls) -> MatcherRuleModel:

@@ -74,11 +74,10 @@ def _preprocess_data_for_coercion(data: Dict[str, Any], model: Type[BaseModel]) 
             processed_data[key] = None
             continue
 
-        if isinstance(value, str) and origin_type in (list, set, dict):
-            try:
-                processed_data[key] = ujson.loads(value)
-            except (ValueError, TypeError):
-                pass
+        try:
+            processed_data[key] = ujson.loads(value)
+        except (ValueError, TypeError):
+            pass
 
         current_value = processed_data[key]
 

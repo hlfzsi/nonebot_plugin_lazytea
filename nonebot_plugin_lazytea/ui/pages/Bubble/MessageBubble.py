@@ -1,3 +1,4 @@
+import threading
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QListWidget, QListWidgetItem
 import sys
@@ -60,28 +61,30 @@ AvatarInfoType = Tuple[str, int]  # 格式: Tuple[头像URL, 头像位置]
 
 class AvatarCache:
     """
-    头像缓存管理器 (单例模式)
+    头像缓存管理器
     - 引用计数：用于管理内存，当没有气泡使用某个头像时，立即释放。
     - 时间过期：用于确保头像数据的新鲜度。
     - 请求锁：防止对同一URL的并发网络请求。
     """
     _instance = None
     CACHE_EXPIRATION_SECONDS = 20 * 60  # 缓存过期时间: 20分钟
+    _instance_lock = threading.Lock()
 
     def __new__(cls, *args, **kwargs):
-        if not cls._instance:
-            cls._instance = super(AvatarCache, cls).__new__(cls)
+        if cls._instance is None:
+            with cls._instance_lock:
+                if cls._instance is None:
+                    cls._instance = super(AvatarCache, cls).__new__(cls)
         return cls._instance
 
     def __init__(self):
         if hasattr(self, '_cache'):
             return
 
-        # 缓存结构: { url: (QPixmap, timestamp, ref_count) }
         self._cache: Dict[str, Tuple[QPixmap, float, int]] = {}
         self._qnam: Optional[QNetworkAccessManager] = None
-        # 请求等待列表/锁: { url: [callback1, callback2, ...] }
         self._pending_requests: Dict[str, List[Callable]] = {}
+        self._lock = threading.Lock()
 
     @property
     def qnam(self) -> QNetworkAccessManager:
@@ -93,48 +96,51 @@ class AvatarCache:
         """
         从缓存中获取头像。如果头像存在且未过期，则返回它。
         """
-        if url in self._cache:
-            pixmap, timestamp, ref_count = self._cache[url]
-            if (time.time() - timestamp) < self.CACHE_EXPIRATION_SECONDS:
-                return pixmap
-            else:
-                logger.debug(f"头像缓存已过期，从缓存中移除 {url}")
-                del self._cache[url]
+        with self._lock:
+            if url in self._cache:
+                pixmap, timestamp, ref_count = self._cache[url]
+                if (time.time() - timestamp) < self.CACHE_EXPIRATION_SECONDS:
+                    return pixmap
+                else:
+                    logger.debug(f"头像缓存已过期，从缓存中移除 {url}")
+                    del self._cache[url]
         return None
 
     def put(self, url: str, pixmap: QPixmap):
         """
         将新下载的头像存入或更新到缓存。
         """
-        if url in self._cache:
-            _, _, old_ref_count = self._cache[url]
-            self._cache[url] = (pixmap, time.time(), old_ref_count)
-        else:
-            self._cache[url] = (pixmap, time.time(), 0)
+        with self._lock:
+            if url in self._cache:
+                _, _, old_ref_count = self._cache[url]
+                self._cache[url] = (pixmap, time.time(), old_ref_count)
+            else:
+                self._cache[url] = (pixmap, time.time(), 0)
 
     def increment_ref(self, url: str):
         """
         增加一个头像的引用计数。
         """
-        if url in self._cache:
-            pixmap, timestamp, ref_count = self._cache[url]
-            self._cache[url] = (pixmap, timestamp, ref_count + 1)
-        else:
-            # 这种情况可能发生在：头像刚过期被清除，但一个气泡仍然持有对它的引用并尝试增加
-            logger.warning(f"尝试增加一个不在缓存中的头像的引用 | URL: {url}")
+        with self._lock:
+            if url in self._cache:
+                pixmap, timestamp, ref_count = self._cache[url]
+                self._cache[url] = (pixmap, timestamp, ref_count + 1)
+            else:
+                logger.warning(f"尝试增加一个不在缓存中的头像的引用 | URL: {url}")
 
     def decrement_ref(self, url: str):
         """
         减少一个头像的引用计数。如果引用计数降为0，则从缓存中删除。
         """
-        if url in self._cache:
-            pixmap, timestamp, ref_count = self._cache[url]
-            new_count = ref_count - 1
-            if new_count <= 0:
-                del self._cache[url]
-                logger.debug(f"头像引用计数为0，已从缓存移除 | URL: {url}")
-            else:
-                self._cache[url] = (pixmap, timestamp, new_count)
+        with self._lock:
+            if url in self._cache:
+                pixmap, timestamp, ref_count = self._cache[url]
+                new_count = ref_count - 1
+                if new_count <= 0:
+                    del self._cache[url]
+                    logger.debug(f"头像引用计数为0，已从缓存移除 | URL: {url}")
+                else:
+                    self._cache[url] = (pixmap, timestamp, new_count)
 
     def request_avatar(self, url: str, callback: Callable):
         """
@@ -147,13 +153,14 @@ class AvatarCache:
             callback(cached_pixmap)
             return
 
-        if url in self._pending_requests:
-            self._pending_requests[url].append(callback)
-            logger.debug(f"命中正在进行的下载，加入等待列表 | URL: {url}")
-            return
+        with self._lock:
+            if url in self._pending_requests:
+                self._pending_requests[url].append(callback)
+                logger.debug(f"命中正在进行的下载，加入等待列表 | URL: {url}")
+                return
 
-        logger.debug(f"缓存未命中，发起新网络请求 | URL: {url}")
-        self._pending_requests[url] = [callback]
+            logger.debug(f"缓存未命中，发起新网络请求 | URL: {url}")
+            self._pending_requests[url] = [callback]
 
         request = QNetworkRequest(QUrl(url))
         reply = self.qnam.get(request)
@@ -165,7 +172,9 @@ class AvatarCache:
         处理已完成的网络下载。
         """
         try:
-            subscribers = self._pending_requests.pop(url, [])
+            with self._lock:
+                subscribers = self._pending_requests.pop(url, [])
+
             if not subscribers:
                 return
 

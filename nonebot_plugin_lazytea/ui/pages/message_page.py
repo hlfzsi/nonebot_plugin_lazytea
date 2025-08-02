@@ -2,7 +2,7 @@ import time
 import ujson
 from typing import Dict, List, Literal, Optional, Tuple
 
-from PySide6.QtCore import Qt, QTimer, QPoint, Signal
+from PySide6.QtCore import Qt, QTimer, QPoint, Signal, QMutex
 from PySide6.QtWidgets import (QVBoxLayout, QHBoxLayout, QCheckBox, QListWidget,
                                QListWidgetItem, QLabel, QWidget, QApplication,
                                QMenu, QScrollBar, QPushButton)
@@ -89,12 +89,27 @@ class MessagePage(PageBase):
     ACCENT_COLOR = "#38A5FD"
     msg_call_signal = Signal(str, dict)
 
+    class _StateManager:
+        __slots__ = ("_page", "_lock")
+
+        def __init__(self, page_instance: "MessagePage"):
+            self._page = page_instance
+            self._lock = page_instance._lock
+
+        def __enter__(self):
+            self._lock.lock()
+            return self._page
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            self._lock.unlock()
+
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self._auto_scroll = True
         # 状态枚举: 显示中、隐藏、搜索中、加载更早消息、进入页面拉取消息
         self.state: Literal["on_show", "hidden", "searching",
                             "loading_earlier", "loading"] = "hidden"
+        self._lock = QMutex()
 
         # 时间戳范围追踪
         self.earliest_loaded_ts = None  # 当前加载的最早时间戳
@@ -115,30 +130,42 @@ class MessagePage(PageBase):
             self._handle_scroll
         )
 
+    def state_manager(self):
+        """
+        提供一个上下文管理器来安全地访问和修改页面状态。
+        ``` python
+        with self.state_manager() as page:
+            if page.state == "on_show":
+                page.state = "loading_earlier"
+        ```
+        """
+        return MessagePage._StateManager(self)
+
     def _connect_signals(self):
         """连接信号"""
         self.msg_call_signal.connect(self.set_message)
         talker.subscribe("message", "call_api", signal=self.msg_call_signal)
 
     def _handle_scroll(self, value):
-        """处理滚动事件"""
-        if self.state in ["loading_earlier", "searching"]:
+        should_load = False
+        with self.state_manager() as page:
+            if page.state not in ["loading_earlier", "searching"]:
+                should_load = True
+
+        if not should_load:
             return
 
         scrollbar = self.list_widget.verticalScrollBar()
-        # 当滚动到顶部附近时加载更早消息
         if scrollbar.value() <= scrollbar.maximum() * 0.1:
             self._load_earlier_messages()
 
     def _load_earlier_messages(self):
-        """加载更早的消息"""
-        if self.state != "on_show" or self.reached_earliest:
-            return
+        with self.state_manager() as page:
+            if page.state != "on_show" or page.reached_earliest or page.earliest_loaded_id is None:
+                return
 
-        if self.earliest_loaded_id is None:
-            return
+            page.state = "loading_earlier"
 
-        self.state = "loading_earlier"
         signal = AsyncQuerySignal()
         signal.finished.connect(self._handle_earlier_messages)
 
@@ -156,19 +183,18 @@ class MessagePage(PageBase):
         )
 
     def _handle_earlier_messages(self, results: List[Tuple], error: Exception):
-        """处理较早消息的加载结果"""
-        if error:
-            self.state = "on_show"
-            return
+        # 在处理UI之前，先原子性地更新状态
+        with self.state_manager() as page:
+            if error:
+                page.state = "on_show"
+                return
 
-        if not results:
-            self.reached_earliest = True
-            self.state = "on_show"
-            return
+            if not results:
+                page.reached_earliest = True
+                page.state = "on_show"
+                return
 
-        # 更新最早时间戳和ID
-        new_earliest_id = results[-1][0]
-        self.earliest_loaded_id = new_earliest_id
+            page.earliest_loaded_id = results[-1][0]
 
         scrollbar = self.list_widget.verticalScrollBar()
         current_scroll = scrollbar.value()
@@ -185,7 +211,8 @@ class MessagePage(PageBase):
 
         QTimer.singleShot(100, lambda: self._adjust_scroll_position(
             current_scroll, first_visible_item, len(results)))
-        self.state = "on_show"
+        with self.state_manager() as page:
+            page.state = "on_show"
 
     def _adjust_scroll_position(self, previous_position: int, first_visible_item: QListWidgetItem, added_count: int):
         """调整滚动位置以保持视觉连续性"""
@@ -232,11 +259,13 @@ class MessagePage(PageBase):
             return
 
         # 清理并验证关键词
-        self.search_keywords = [kw.strip() for kw in keywords if kw.strip()]
-        if not self.search_keywords:
+        clean_keywords = [kw.strip() for kw in keywords if kw.strip()]
+        if not clean_keywords:
             return
 
-        self.state = "searching"
+        with self.state_manager() as page:
+            page.search_keywords = clean_keywords
+            page.state = "searching"
         self._clear_message_list()
         self._add_search_bar(self.search_keywords)
 
@@ -335,18 +364,18 @@ class MessagePage(PageBase):
             self.add_message(meta, content, BotToolKit.color.get(bot))
 
     def exit_search(self):
-        """退出搜索模式"""
         if self.search_bar:
             self.main_layout.removeWidget(self.search_bar)
             self.search_bar.deleteLater()
             self.search_bar = None
 
-        self.search_keywords = []
+        with self.state_manager() as page:
+            page.search_keywords = []
+            page.state = "on_show"
+            page.earliest_loaded_id = None
+            page.reached_earliest = False
+
         self._clear_message_list()
-        self.state = "on_show"
-        self.earliest_loaded_ts = None
-        self.earliest_loaded_id = None
-        self.reached_earliest = False
         self.get_and_set_recent_msg(1, self.LOAD_COUNT)
 
     def _setup_ui(self) -> None:
@@ -386,7 +415,7 @@ class MessagePage(PageBase):
         self.list_widget.setVerticalScrollBar(ModernScrollBar())
         self.list_widget.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        
+
         self.list_widget.setStyleSheet("""
             QListWidget { 
                 background: transparent; 
@@ -639,11 +668,13 @@ class MessagePage(PageBase):
                 content, plaintext = "".join(
                     content_parts), "".join(plaintext_parts)
 
-        if self.state == "on_show":
-            self.add_message(metadata, content, BotToolKit.color.get(bot))
-        elif self.state == "searching":
-            if all(kw.lower() in plaintext.lower() for kw in self.search_keywords):
+        with self.state_manager() as page:
+            if page.state == "on_show":
                 self.add_message(metadata, content, BotToolKit.color.get(bot))
+            elif page.state == "searching":
+                if all(kw.lower() in plaintext.lower() for kw in page.search_keywords):
+                    self.add_message(metadata, content,
+                                     BotToolKit.color.get(bot))
 
         groupid = data.get("groupid") or "私聊"
         self.insert(type_, [userid, groupid, bot,
@@ -682,30 +713,32 @@ class MessagePage(PageBase):
         )
 
     def _handle_recent_messages(self, results: List[Tuple], error: Exception):
-        """处理最近消息的加载结果"""
-        if error:
-            return
-        if not results:
+        if error or not results:
             return
 
-        ids = [r[0] for r in results]
-        self.earliest_loaded_id = min(ids)
+        with self.state_manager() as page:
+            ids = [r[0] for r in results]
+            if ids:
+                page.earliest_loaded_id = min(ids)
 
         for msg_id, meta, content, bot, _ in reversed(results):
             meta = ujson.loads(meta)
             self.add_message(meta, content, BotToolKit.color.get(bot))
 
     def on_enter(self):
-        """进入页面时调用"""
         self._clear_message_list()
-        self.state = "on_show"
-        self.earliest_loaded_id = None
-        self.reached_earliest = False
+
+        with self.state_manager() as page:
+            page.state = "on_show"
+            page.earliest_loaded_id = None
+            page.reached_earliest = False
+
         self.get_and_set_recent_msg(1, self.LOAD_COUNT)
 
     def on_leave(self):
-        """离开页面时调用"""
-        self.state = "hidden"
+        with self.state_manager() as page:
+            page.state = "hidden"
+
         self._clear_message_list()
         if self.search_bar:
             self.main_layout.removeWidget(self.search_bar)
