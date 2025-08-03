@@ -2,13 +2,19 @@
 
 如果喜欢本项目，请点击右上角的star。每一个star都是我们的动力。
 
-[![PyPI](https://img.shields.io/pypi/v/nonebot_plugin_lazytea.svg)](https://pypi.org/project/nonebot_plugin_lazytea/)
-![alt text](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)
+[![PyPI](https://img.shields.io/pypi/v/nonebot-plugin-lazytea.svg)](https://pypi.org/project/nonebot-plugin-lazytea/)
+[![Total Downloads](https://static.pepy.tech/badge/nonebot-plugin-lazytea)](https://pypi-stats.org/packages/nonebot-plugin-lazytea)
+[![Weekly Downloads](https://static.pepy.tech/badge/nonebot-plugin-lazytea/week)](https://pypi-stats.org/packages/nonebot-plugin-lazytea)
+![Python Version](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)
 ![Free Threading / No GIL](https://img.shields.io/badge/Free%20Threading%20%2F%20No%20GIL-supported-brightgreen.svg)
 [![GitHub stars](https://img.shields.io/github/stars/hlfzsi/nonebot_plugin_lazytea?style=social)](https://github.com/hlfzsi/nonebot_plugin_lazytea)
 ![Star History](https://api.star-history.com/svg?repos=hlfzsi/nonebot_plugin_lazytea,hlfzsi/nonebot_plugin_lazytea_shell_extension&type=Date)
 
-**相关链接：**
+**你可能在寻找**（友情链接）：
+
+* [nonebot-flutter-webui-dashboard](https://github.com/NonebotGUI/nonebot-flutter-webui-dashboard)：✨ 新一代 NoneBot Web 管理界面 ✨
+
+**本项目相关链接：**
 
 * [nonebot_plugin_lazytea_shell_extension](https://github.com/hlfzsi/nonebot_plugin_lazytea_shell_extension/)：为LazyTea启用命令管理，允许通过聊天消息管理权限。
 
@@ -70,6 +76,7 @@
 
 *注：Windows 11 系统下部分字体可能显示不全，如遇此问题，欢迎向我们反馈。*
 
+
 | 配置级别     | 最低要求    | 推荐配置   | 发烧友配置 |
 | ------------ | ----------- | ---------- | ---------- |
 | **CPU**      | 任意现代CPU | 双核及以上 | i9-14900KS |
@@ -111,6 +118,7 @@ LazyTea的版本管理遵循PEP 440标准。
 ### **插件元数据约定**
 
 为了让您的插件更好地被 LazyTea 展示，请在 `metadata` 的 `extra` 字段中添加以下可选信息：
+
 
 | 字段名         | 类型   | 说明                                                                                 |
 | :------------- | :----- | :----------------------------------------------------------------------------------- |

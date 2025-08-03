@@ -1,5 +1,6 @@
 import time
 from threading import Lock
+import ujson
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 from nonebot import get_driver, logger
 from nonebot.typing import T_State
@@ -357,7 +358,18 @@ async def handle_api_call(bot: Bot, api: str, data: Dict[str, Any]):
         await send_event("call_api", data_to_send)
 
     else:
-        logger.debug(f"未捕获的api调用: {api}\n{data}")
+        truncated_data = {}
+        for key, value in data.items():
+            value_str = str(value)
+            if len(value_str) > 60:
+                truncated_data[key] = value_str[:57] + "..."
+            else:
+                truncated_data[key] = value_str
+
+        formatted_data = ujson.dumps(
+            truncated_data, indent=4, allow_nan=True, ensure_ascii=False)
+
+        logger.debug(f"未捕获的api调用: {api}\n{formatted_data}")
 
         # else:
         #    data_to_send = {
