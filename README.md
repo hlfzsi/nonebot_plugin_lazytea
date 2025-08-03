@@ -12,7 +12,7 @@
 
 **你可能在寻找**（友情链接）：
 
-* [nonebot-flutter-webui-dashboard](https://github.com/NonebotGUI/nonebot-flutter-webui-dashboard)：✨ 新一代 NoneBot Web 管理界面 ✨
+* [NoneBot WebUI](https://webui.nbgui.top/)：✨ 新一代 NoneBot Web 管理界面 ✨
 
 **本项目相关链接：**
 
