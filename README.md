@@ -1,9 +1,3 @@
-好的，我们来为 `nonebot_plugin_lazytea` 项目的文档进行一次全面的美化与重组。
-
-我们将遵循文学化的叙事方式，从项目的核心魅力出发，逐步深入到功能细节与技术实现，同时采用更具现代感的布局和用户友好的语言，让新用户能立刻感受到项目的价值。
-
----
-
 <div align="center">
 
 <a href="https://github.com/hlfzsi/nonebot_plugin_lazytea">
