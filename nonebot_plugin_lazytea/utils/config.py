@@ -12,6 +12,7 @@ class Config(BaseModel):
     pip_index_url: str = Field(
         "https://pypi.tuna.tsinghua.edu.cn/simple", description="更新地址")
 
+    headless: bool = Field(False, description="是否启用无头模式")
 
     @property
     def environment(self):

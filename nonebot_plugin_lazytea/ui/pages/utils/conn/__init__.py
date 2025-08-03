@@ -7,8 +7,8 @@ from ..tealog import logger
 
 __all__ = ["init_db", "get_database", "AsyncQuerySignal"]
 
-_path = Path(os.getenv("UIDATADIR") or Path(
-    __file__).resolve().parent.parent.parent.parent / "resources")
+_path = Path(os.getenv("UIDATADIR") or (Path(".") / "resources"))
+os.makedirs(_path, exist_ok=True)
 path = str(_path / "data.db3")
 
 

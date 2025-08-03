@@ -423,8 +423,8 @@ class MessagePage(PageBase):
             }
             QListWidget::item { 
                 border: none; 
-                margin: 8px 0; 
-                padding: 0; 
+                margin: 8px 0 8px 15px; 
+                padding: 0 50px 0 0; 
             }
         """)
         self.list_widget.setSpacing(8)

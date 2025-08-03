@@ -27,6 +27,7 @@ from .pages.background.quit import StdinListener
 from .pages.utils.client import talker
 from .pages.utils.tealog import logger
 from .pages.utils.conn import init_db, get_database
+from .pages.utils.env import IS_RUN_ALONE
 
 
 def retroactive_aliasing_patch(entry_file_path: str, package_import_prefix: str):
@@ -341,7 +342,7 @@ class MainWindow(QWidget):
 
         self.load_decoration_image()
 
-        talker.start()
+        QTimer.singleShot(0, talker.start)
         self.plugininit = None      # Never call it
         QTimer.singleShot(0, init_db)
 
@@ -350,8 +351,9 @@ class MainWindow(QWidget):
 
         talker.started.connect(set_plugininit)
         QTimer.singleShot(50, lambda: Recorder(parent=self))
-        StdinListener.get_instance().start()
-        StdinListener.get_instance().shutdown_requested.connect(app.quit)
+        if not IS_RUN_ALONE:
+            StdinListener.get_instance().start()
+            StdinListener.get_instance().shutdown_requested.connect(app.quit)
         app.aboutToQuit.connect(self.cleanup_overlay)
         app.aboutToQuit.connect(talker.stop)
 
@@ -1024,11 +1026,6 @@ def run(*args: Any, **kwargs: Any) -> None:
 
         from importlib.resources import files, as_file
 
-        # 补齐包名
-        global __package__
-        __package__ = "ui" if not __package__ else __package__
-
-        # 设置窗口图标
         try:
             resource_ref = files(__package__).joinpath("resources", "app.ico")
             with as_file(resource_ref) as icon_file:
@@ -1064,7 +1061,7 @@ def run(*args: Any, **kwargs: Any) -> None:
 
         app.aboutToQuit.connect(get_database().shutdown)
         try:
-            if os.getenv("LAUCHASCHILD"):
+            if not IS_RUN_ALONE:
                 retroactive_aliasing_patch(__file__, 'nonebot_plugin_lazytea')
             app.exec()
         except KeyboardInterrupt:

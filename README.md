@@ -116,7 +116,7 @@ nb plugin install nonebot_plugin_lazytea
 * **环境**: 主进程，Async Loop。
 * **SDK**: `from nonebot_plugin_lazytea.sdk import SDK_nb`
 * **描述**: 您可以在此编写与 NoneBot2 主体交互的代码。
-* **配置热重载**: 您可以提供一个与插件包**导入名同名**的函数。当配置更新时，LazyTea 会调用此函数，并将最新的配置实例作为唯一参数传入。
+* **配置热重载**: 您可以注册一个与插件包**导入名同名**的函数。当配置更新时，LazyTea 会调用此函数，并将最新的配置实例作为唯一参数传入。
 
 #### `__ui__.py`
 

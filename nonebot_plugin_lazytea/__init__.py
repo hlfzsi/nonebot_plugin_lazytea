@@ -1,4 +1,5 @@
 import subprocess
+import time
 from nonebot import get_driver, logger, require
 require("nonebot_plugin_uninfo")  # noqa
 require("nonebot_plugin_localstore")  # noqa
@@ -88,7 +89,7 @@ async def pre():
     ui_env["UIDATADIR"] = str(
         nonebot_plugin_localstore.get_plugin_data_dir())
 
-    ui_env["LAUCHASCHILD"] = "true"
+    ui_env["LAUNCHASCHILD"] = "true"
 
     creation_flags = {}
     if sys.platform == "win32":
@@ -96,13 +97,14 @@ async def pre():
     else:
         creation_flags['start_new_session'] = True
 
-    ui_process = await asyncio.create_subprocess_exec(
-        sys.executable, "-m", "ui.main_window",
-        cwd=script_dir,
-        env=ui_env,
-        stdin=asyncio.subprocess.PIPE,
-        **creation_flags
-    )
+    if not config.headless:
+        ui_process = await asyncio.create_subprocess_exec(
+            sys.executable, "-m", "ui.main_window",
+            cwd=script_dir,
+            env=ui_env,
+            stdin=asyncio.subprocess.PIPE,
+            **creation_flags
+        )
 
     async def send_data(server: Server, queue: asyncio.Queue):
         try:
@@ -113,6 +115,8 @@ async def pre():
             pass
 
     send_task = asyncio.create_task(send_data(server, server_send_queue))
+    server.start_time = time.time()
+    asyncio.create_task(server.clear_transient_buffer_after_delay())
 
 
 @driver.on_shutdown
