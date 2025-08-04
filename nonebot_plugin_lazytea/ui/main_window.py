@@ -500,10 +500,10 @@ class MainWindow(QWidget):
         """加载本地背景装饰图片"""
         try:
             bg_folder = None
+            import importlib.resources
 
             try:
-                import importlib.resources
-                resource_ref = importlib.resources.files(__package__).joinpath(
+                resource_ref = importlib.resources.files(__package__).joinpath( # type: ignore
                     "resources").joinpath("bg")
                 with importlib.resources.as_file(resource_ref) as res_path:
                     if res_path.is_dir():
@@ -523,17 +523,25 @@ class MainWindow(QWidget):
 
             # 获取所有图片文件
             image_files = []
-            for ext in ['.jpg', '.png', '.jpeg']:
-                image_files.extend(bg_folder.glob(f"*{ext}"))
-                image_files.extend(bg_folder.glob(f"*{ext.upper()}"))
+            if hasattr(bg_folder, 'iterdir'): # For Path objects
+                for ext in ['.jpg', '.png', '.jpeg']:
+                    image_files.extend(bg_folder.glob(f"*{ext}"))
+                    image_files.extend(bg_folder.glob(f"*{ext.upper()}"))
+            else: # For Nuitka's resource reader
+                for item in bg_folder.iterdir():
+                    if item.is_file() and item.name.lower().endswith(('.jpg', '.png', '.jpeg')):
+                        image_files.append(item)
 
             if not image_files:
                 logger.warning("未找到可用的背景图片")
                 return
 
             # 随机选择一张图片
-            image_path = random.choice(image_files)
-            pixmap = QPixmap(str(image_path))
+            image_path_obj = random.choice(image_files)
+            
+            pixmap = QPixmap()
+            with importlib.resources.as_file(image_path_obj) as image_path:
+                pixmap.load(str(image_path))
 
             if pixmap.isNull():
                 logger.warning(f"无法加载图片: {image_path}")
@@ -1027,7 +1035,7 @@ def run(*args: Any, **kwargs: Any) -> None:
         from importlib.resources import files, as_file
 
         try:
-            resource_ref = files(__package__).joinpath("resources", "app.ico")
+            resource_ref = files(__package__).joinpath("resources", "app.ico") # type: ignore
             with as_file(resource_ref) as icon_file:
                 _icon_path = str(icon_file) if icon_file.is_file() else ""
 
