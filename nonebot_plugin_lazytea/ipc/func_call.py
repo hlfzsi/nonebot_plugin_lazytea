@@ -1,15 +1,16 @@
 import asyncio
 import importlib
 import sys
+import time
 import ujson
 from typing import Any, Dict, List, Set, Type, Union, get_origin
 from pydantic import BaseModel, ValidationError
 from nonebot.plugin import get_loaded_plugins, get_plugin_by_module_name
-from nonebot import get_plugin_config as nb_config, logger
+from nonebot import get_plugin_config as nb_config, logger, get_bot
 
 from .server import Server
 from ..utils.config import _config
-from ..utils.commute import bot_off_line
+from ..utils.commute import bot_off_line, send_event
 from .envhandler import EnvWriter
 from ..utils.roster import FuncTeller
 
@@ -228,8 +229,27 @@ def ui_load(plugins_to_load: List):
 
 
 @server.register_handler("bot_switch")
-def bot_switch(bot_id: str, platform: str, is_online_now: bool):
+async def bot_switch(bot_id: str, platform: str, is_online_now: bool):
+    """
+    准备下线: is_online_now = False
+    
+    准备上线: is_online_now = True
+    """
     if is_online_now:
         bot_off_line[platform].discard(bot_id)
+        data = {
+            "bot": bot_id,
+            "adapter": get_bot(bot_id).adapter.get_name(),
+            "platform": platform,
+            "time": int(time.time())
+        }
+        await send_event("bot_connect", data)
     else:
         bot_off_line[platform].add(bot_id)
+        data = {
+            "bot": bot_id,
+            "adapter": get_bot(bot_id).adapter.get_name(),
+            "platform": platform,
+            "time": int(time.time())
+        }
+        await send_event("bot_disconnect", data)
