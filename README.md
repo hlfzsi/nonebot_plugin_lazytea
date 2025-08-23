@@ -184,7 +184,7 @@ class PluginHTML(BaseModel):
 ```
 
 * 桌面端 / Web 均使用`jinja2`进行渲染。若你的页面已经自行渲染，无需`LazyTea`干涉，可以将`is_rendered`设置为 `True`。若设置为`False`，则模板语法需要遵循`jinja2`规范。
-*
+
 * 桌面端 / Web 渲染时允许传入自定义上下文。此外，我们还提供了一些默认上下文：
   * plugin_name  :  插件名称。
   * api_base_url  :  本地服务器的基础url，可用于与后端通信。
@@ -220,7 +220,7 @@ class PluginHTML(BaseModel):
 
 ###### 1. UI页面渲染机制
 
-当用户访问插件的自定义UI页面（通过 `/plugin/{plugin_name}/custom_html`）时，系统会执行以下步骤：
+当用户访问插件的自定义UI页面（通过 `/api/plugin/{plugin_name}/custom_html`）时，系统会执行以下步骤：
 
 1. 从后端获取HTML模板和上下文数据。
 2. 使用 `Jinja2` 模板引擎渲染页面。
