@@ -1,14 +1,18 @@
 import os
+import webbrowser
+import re
+import base64
+
 import orjson
 from typing import Any, List, Dict, Optional
 from PySide6.QtGui import (QColor, QPixmap,
                            QFontDatabase)
-from PySide6.QtCore import Qt, QSize, Signal
+from PySide6.QtCore import Qt, QSize, Signal, QByteArray
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
                                QSizePolicy, QMenu, QGraphicsDropShadowEffect, QScrollArea,
                                QGridLayout, QStackedWidget)
-import webbrowser
-import re
+
+from .utils.env import IS_RUN_ALONE
 from .base_page import PageBase
 from .utils.version_check import VersionUtils
 from .utils.subpages.config_page import ConfigEditor
@@ -39,7 +43,7 @@ class PluginCard(QFrame):
         self.success_signal.connect(self._show_plugin_subpage)
         self.update_signal.connect(self._handle_update)
         self.html_success_signal.connect(self._show_plugin_html)
-        self._load_icon()
+        self._load_local_icon()
         self._init_style()
         self._init_ui()
         self._init_context_menu()
@@ -126,18 +130,21 @@ class PluginCard(QFrame):
         else:
             logger.warning(f"加载插件 {plugin_name} 时配置页面未找到父控件")
 
-    def _load_icon(self):
+    def _load_local_icon(self):
         """加载插件图标"""
-        icon_path = self.plugin_data["meta"].get("icon_abspath")
-        if icon_path and os.path.exists(icon_path):
-            pixmap = QPixmap(icon_path)
-            if not pixmap.isNull():
-                # 缩放到40x40并保持比例
-                self.icon_pixmap = pixmap.scaled(
-                    QSize(40, 40),
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation
-                )
+        if not IS_RUN_ALONE and self.plugin_data["meta"].get("icon_abspath"):
+            icon_path = self.plugin_data["meta"].get("icon_abspath")
+            if icon_path and os.path.exists(icon_path):
+                pixmap = QPixmap(icon_path)
+                self._set_icon(pixmap)
+
+    def _set_icon(self, pixmap: QPixmap):
+        if not pixmap.isNull():
+            self.icon_pixmap = pixmap.scaled(
+                QSize(40, 40),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
 
     def _init_style(self):
         self.setMinimumSize(320, 180)
@@ -464,6 +471,7 @@ class PluginCard(QFrame):
 class PluginPage(PageBase):
     """插件管理页面"""
     success_signal = Signal(ResponsePayload)
+    internet_icon_success = Signal(ResponsePayload)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -477,6 +485,7 @@ class PluginPage(PageBase):
         self.stack.addWidget(self.main_widget)
         self.theme_color = QColor("#6C5CE7")
         self.success_signal.connect(self._load_plugins)
+        self.internet_icon_success.connect(self._set_internet_icons)
         self._init_ui()
         self._load_fonts()
 
@@ -620,7 +629,12 @@ class PluginPage(PageBase):
             row, col = 0, 0
             max_cols = 2  # 每行最多2个卡片
 
+            _internet_icons = {}  # plugin_name : icon_abspath
+
             for plugin_name, plugin_data in plugins.items():
+                if IS_RUN_ALONE and plugin_data["meta"]["icon_abspath"]:
+                    _internet_icons[plugin_name] = plugin_data["meta"]["icon_abspath"]
+
                 card = PluginCard(plugin_data, self)
                 self.plugin_cards.append(card)
                 self.card_layout.addWidget(card, row, col)
@@ -634,12 +648,33 @@ class PluginPage(PageBase):
                     col = 0
                     row += 1
 
+            keys = list(_internet_icons.keys())
+            paths = list(_internet_icons.values())
+            if keys:
+                talker.send_request("read_files", timeout=15,
+                                    paths=paths, keys=keys, success_signal=self.internet_icon_success)
+
             self.plugin_count.setText(f"已加载 {len(plugins)} 个插件")
 
         except Exception as e:
             import traceback
             traceback.print_exc()
             self.plugin_count.setText("加载失败")
+
+    def _set_internet_icons(self, data: ResponsePayload):
+        internet_icons = data.data
+        for card in self.plugin_cards:
+            if (name := card.plugin_data.get("name")) in internet_icons:
+                base64str = base64.b64decode(internet_icons[name])
+                byte_array = QByteArray(base64str)
+                pixmap = QPixmap()
+                pixmap.loadFromData(byte_array)
+                card._set_icon(pixmap)
+                if card.icon_pixmap:
+                    card.icon_label.setText("")
+                    card.icon_label.setStyleSheet("")
+                    card.icon_label.setPixmap(card.icon_pixmap)
+                logger.debug(f"为插件 {name} 设置远程图标")
 
     def _clear_plugins(self):
         """清除已加载的插件卡片"""
