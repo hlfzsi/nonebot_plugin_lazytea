@@ -10,7 +10,7 @@ from PySide6.QtGui import (QColor, QPixmap,
 from PySide6.QtCore import Qt, QSize, Signal, QByteArray
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
                                QSizePolicy, QMenu, QGraphicsDropShadowEffect, QScrollArea,
-                               QGridLayout, QStackedWidget)
+                               QGridLayout, QStackedWidget, QTextEdit)
 
 from .utils.env import IS_RUN_ALONE
 from .base_page import PageBase
@@ -283,10 +283,11 @@ class PluginCard(QFrame):
 
         main_layout.addWidget(bottom_bar)
 
-    def set_update_available(self, latest_version: str):
+    def set_update_available(self, latest_version: str, changelog: str):
         """设置更新可用状态"""
         logger.debug(f"{self.plugin_data.get('name')} 最新版本为 {latest_version}")
         self.latest_version = latest_version
+        self.changelog = changelog
         current_version = self.plugin_data["meta"].get("version", "")
 
         if current_version and latest_version:
@@ -403,25 +404,80 @@ class PluginCard(QFrame):
         title = "更新插件"
         message = f"将更新插件 {formatted_name} 到 v{version.removeprefix('v')}，请确认执行操作.\n更新完成后将弹窗提醒.\n请不要切换页面"
 
-        reply = MessageBoxBuilder().set_title(title).set_content(
-            message).set_icon_type(MessageBoxConfig.IconType.NoIcon).add_button(
-                ButtonConfig(
-                    btn_type=MessageBoxConfig.ButtonType.OK,
-                    text="确定"
-                )
+        reply = MessageBoxBuilder().set_title(title).set_icon_type(MessageBoxConfig.IconType.NoIcon).add_custom_widget(
+            self._create_changelog_widget(message)
         ).add_button(
-                ButtonConfig(
-                    btn_type=MessageBoxConfig.ButtonType.Cancel,
-                    text="取消",
-                    animation_color=QColor("#FFB4B4")
-                )
-        ).build_and_fetch_result()
+            ButtonConfig(
+                btn_type=MessageBoxConfig.ButtonType.OK,
+                text="确定"
+            )
+        ).add_button(
+            ButtonConfig(
+                btn_type=MessageBoxConfig.ButtonType.Cancel,
+                text="取消",
+                animation_color=QColor("#FFB4B4")
+            )
+        ).set_spacing(5).build_and_fetch_result()
 
         if reply != MessageBoxConfig.ButtonType.OK:
             return
 
         talker.send_request(
             "update_plugin", plugin_name=self.plugin_data["meta"].get("pip_name") or self.plugin_data["name"], success_signal=self.update_signal, error_signal=self.update_signal, timeout=600)
+
+    def _create_changelog_widget(self, extra_msg: str = ""):
+        """创建changelog显示组件"""
+        changelog_widget = QWidget()
+        changelog_layout = QVBoxLayout(changelog_widget)
+        changelog_layout.setContentsMargins(0, 10, 0, 0)
+
+        changelog_title = QLabel("更新日志:")
+        changelog_title.setStyleSheet("""
+            font: bold 14px 'Segoe UI';
+            color: #2D3436;
+            margin-bottom: 5px;
+        """)
+        changelog_layout.addWidget(changelog_title)
+
+        changelog_text = QTextEdit()
+        changelog_text.setReadOnly(True)
+        changelog_text.setMaximumHeight(200)
+        changelog_text.setMinimumHeight(150)
+        changelog_text.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid #E0E0E0;
+                border-radius: 6px;
+                padding: 8px;
+                background-color: #FAFAFA;
+                font: 12px 'Consolas', 'Monaco', monospace;
+                line-height: 1.4;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #F0F0F0;
+                width: 8px;
+                border-radius: 4px;
+            }
+            QScrollBar::handle:vertical {
+                background: #BDBDBD;
+                min-height: 20px;
+                border-radius: 4px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0;
+            }
+        """)
+
+        if hasattr(self, 'changelog') and self.changelog:
+            pass
+        else:
+            self.changelog = "暂无更新日志信息"
+        changelog_text.setMarkdown(
+            f"**{extra_msg}**\n{self.changelog}" if extra_msg else self. changelog)
+
+        changelog_layout.addWidget(changelog_text)
+
+        return changelog_widget
 
     def _handle_update(self, data: ResponsePayload):
         if data.error:
@@ -506,7 +562,8 @@ class PluginPage(PageBase):
                             current_version,
                             data["version"]
                         ) < 0:
-                            card.set_update_available(data["version"])
+                            card.set_update_available(
+                                data["version"], data["changelog"])
                         else:
                             logger.debug(
                                 f"{plugin_name} 已经是最新版本 {card.plugin_data.get('meta').get('version')}")

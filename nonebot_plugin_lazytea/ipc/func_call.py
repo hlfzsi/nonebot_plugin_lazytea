@@ -234,7 +234,7 @@ async def update_plugin(plugin_name: str) -> Union[str, Dict[str, str]]:
     try:
         pip_index_url = _config.pip_index_url
         command = [
-            sys.executable, "-m", "pip", "install", "--upgrade",
+            sys.executable, "-m", "pip", "install", "--upgrade", "--pre",
             plugin_name, "--index-url", pip_index_url,
         ]
 

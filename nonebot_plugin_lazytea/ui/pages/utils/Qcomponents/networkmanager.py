@@ -64,18 +64,21 @@ class ReleaseNetworkManager(QObject):
     def _handle_github_response(self, reply: QNetworkReply, plugin_name: str):
         """处理GitHub API响应"""
         if reply.error() == QNetworkReply.NetworkError.NoError:
-            data = bytes(reply.readAll().data()).decode()
+            data = bytes(reply.readAll().data()).decode('utf-8')
             try:
                 response = orjson.loads(data)
+                version = response.get("tag_name", "").lstrip("v")
+                changelog = response.get("body", "")
                 self.request_finished.emit("github_release", {
                     "success": True,
-                    "version": response.get("tag_name", "").lstrip("v")
+                    "version": version,
+                    "changelog": changelog
                 },
                     plugin_name)
             except Exception as e:
                 self.request_finished.emit("github_release", {
                     "success": False,
-                    "error": str(e)
+                    "error": f"JSON parsing error: {e}"
                 },
                     plugin_name)
         else:
