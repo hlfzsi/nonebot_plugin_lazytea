@@ -4,9 +4,7 @@
   <img src="https://socialify.git.ci/hlfzsi/nonebot_plugin_lazytea/image?description=1&descriptionEditable=%E2%9C%A8%20%E4%B8%80%E6%AC%BE%E4%B8%BA%20NoneBot2%20%E7%B2%BE%E5%BF%83%E6%89%93%E9%80%A0%E7%9A%84%E6%9C%AC%E5%9C%B0%E5%9B%BE%E5%BD%A2%E5%8C%96%E7%95%8C%E9%9D%A2%20%E2%9C%A8&issues=1&language=1&logo=https%3A%2F%2Fraw.githubusercontent.com%2Fhlfzsi%2Fnonebot_plugin_lazytea%2Fmain%2Fimages%2FREADME%2Fapp.png&name=1&owner=1&pattern=Plus&stargazers=1&theme=Auto" alt="LazyTea" width="640" height="320" />
 </a>
 
-
 _—— 来喝一杯下午茶，享受片刻的宁静与高效？ ——_
-
 
 [![PyPI](https://img.shields.io/pypi/v/nonebot-plugin-lazytea.svg)](https://pypi.org/project/nonebot-plugin-lazytea)
 [![Total Downloads](https://static.pepy.tech/badge/nonebot-plugin-lazytea)](https://pypi-stats.org/packages/nonebot-plugin-lazytea)
@@ -25,13 +23,16 @@ _—— 来喝一杯下午茶，享受片刻的宁静与高效？ ——_
 
 为了更好地理解 LazyTea 生态，请注意以下几个项目的区别与联系：
 
-| 项目                          | 主要职责                                       | 仓库地址                                                                                     |
-| :---------------------------- | :--------------------------------------------- | :------------------------------------------------------------------------------------------- |
-| 🍵**LazyTea Client** | **独立桌面客户端**，用于连接并管理后端服务。   | [LazyTea-Client](https://github.com/hlfzsi/LazyTea-Client)                                   |
-| 🔌**nonebot_plugin_lazytea (本项目)**  | **NoneBot2 插件**，作为 LazyTea 的后端服务端。 | [nonebot_plugin_lazytea](https://github.com/hlfzsi/nonebot_plugin_lazytea)                   |
-| 🐚**lazytea-shell-extension** | **命令行扩展**，允许通过聊天消息执行管理命令。 | [lazytea-shell-extension](https://github.com/hlfzsi/nonebot_plugin_lazytea_shell_extension/) |
 
-简单来说，本项目 (`nonebot_plugin_lazytea`) 作为服务端安装在您的机器人上。您可以直接使用它提供的本地 GUI，也可以选择下载独立的 `LazyTea Client` 来进行远程管理。
+| 项目                                  | 主要职责                                       | 仓库地址                                                                                     |
+| :------------------------------------ | :--------------------------------------------- | :------------------------------------------------------------------------------------------- |
+| 🔌**nonebot_plugin_lazytea (本项目)** | **NoneBot2 插件**，作为 LazyTea 的后端服务端。 | [nonebot_plugin_lazytea](https://github.com/hlfzsi/nonebot_plugin_lazytea)                   |
+| 🍵**LazyTea Client**                  | **独立桌面客户端**，用于连接并管理后端服务。   | [LazyTea-Client](https://github.com/hlfzsi/LazyTea-Client)                                   |
+| 🌐**LazyTea Web**                     | **Web管理界面**，提供跨平台的浏览器访问体验。  | [LazyTea-Web](https://github.com/hlfzsi/LazyTea-Web)                                         |
+| 📱**LazyTea Mobile**                  | **跨平台移动客户端**，随时随地管理机器人。     | [LazyTea-mobile](https://github.com/hlfzsi/LazyTea-mobile)                                   |
+| 🐚**lazytea-shell-extension**         | **命令行扩展**，允许通过聊天消息执行管理命令。 | [lazytea-shell-extension](https://github.com/hlfzsi/nonebot_plugin_lazytea_shell_extension/) |
+
+简单来说，本项目 (`nonebot_plugin_lazytea`) 作为服务端安装在您的机器人上。您可以直接使用它提供的本地 GUI，也可以选择下载独立的 `LazyTea 客户端/服务端` 来进行远程管理。
 
 <br>
 
@@ -78,7 +79,7 @@ _—— 来喝一杯下午茶，享受片刻的宁静与高效？ ——_
 
 ### **1. 系统要求**
 
-*注：Windows 11 系统下部分字体可能显示不全，如遇此问题，欢迎向我们反馈。*
+_注：Windows 11 系统下部分字体可能显示不全，如遇此问题，欢迎向我们反馈。_
 
 
 | 配置级别     | 最低要求    | 推荐配置   | 发烧友配置 |
@@ -106,25 +107,30 @@ nb plugin install nonebot_plugin_lazytea
 为了让您的插件更好地被 LazyTea 展示，请在 `metadata` 的 `extra` 字段中添加以下可选信息：
 
 
-| 字段名         | 类型   | 说明                                                                                |
-| :------------- | :----- | :---------------------------------------------------------------------------------- |
-| `version`      | `str`  | 用于版本检查。请确保插件主页为 GitHub 地址，且版本号与 Git Tag 一致。遵循 PEP 440。 |
-| `icon_abspath` | `str`  | 插件图标的**绝对路径**。建议使用优化过的小尺寸图片。                                |
-| `author`       | `str`  | 插件作者的大名。                                                                    |
-| `pip_name`     | `str`  | 如果插件导入名与 PyPI 包名不同，请在此处填写正确的 PyPI 包名。                      |
-| `ui_support`   | `bool` | 设置为`True` 以允许 LazyTea 加载您自定义的 UI 页面和相关逻辑。                      |
+| 字段名         | 类型   | 说明                                                                                                                |
+| :------------- | :----- | :------------------------------------------------------------------------------------------------------------------ |
+| `version`      | `str`  | 用于版本检查。请确保插件主页为 GitHub 地址，且版本号与 Git Tag 一致。遵循 PEP 440。                                 |
+| `icon_abspath` | `str`  | 插件图标的**绝对路径**。建议使用优化过的小尺寸图片。                                                                |
+| `author`       | `str`  | 插件作者的大名。                                                                                                    |
+| `pip_name`     | `str`  | 如果插件导入名与 PyPI 包名不同，请在此处填写正确的 PyPI 包名。                                                      |
+| `ui_support`   | `bool` | 设置为`True` 以允许 LazyTea 加载您自定义的 UI 页面和相关逻辑。                                                      |
+| `html_exists`  | `bool` | 设置为`True`以允许 LazyTea 应用您自定义的 html 页面和相关逻辑。 (若本项设置为`True`,则`ui_support`也应设置为`True`) |
 
 ### **自定义UI开发**
+
+#### 方案一：原生APP
 
 您可以为您的插件打造专属配置页面，替代 LazyTea 的自动生成页面。
 
 * **技术栈要求**: 自定义 UI 必须使用 **PySide6**。
 * **启用开关**: 必须在元数据中将 `ui_support` 设为 `True`。
 * **解耦设计**: 您的插件**无需将 LazyTea 作为强制依赖**。当用户安装 LazyTea 时，UI 会自动加载；反之，您的插件将以无 UI 模式正常运行。
+* 优势：高度自定义，性能表现优异，与`LazyTea`无缝集成
+* 劣势：仅在本地GUI可用，开发复杂
 
 在您插件包的顶层目录（`__init__.py` 所在目录），创建以下两个文件，LazyTea 将会自动发现并加载它们：
 
-#### `__call__.py`
+##### `__call__.py`
 
 * **时机**: GUI 加载完成，`__ui__.py` 导入之前。
 * **环境**: 主进程，Async Loop。
@@ -132,7 +138,7 @@ nb plugin install nonebot_plugin_lazytea
 * **描述**: 您可以在此编写与 NoneBot2 主体交互的代码。
 * **配置热重载**: 您可以注册一个与插件包**导入名同名**的函数。当配置更新时，LazyTea 会调用此函数，并将最新的配置实例作为唯一参数传入。
 
-#### `__ui__.py`
+##### `__ui__.py`
 
 * **时机**: `__call__.py` 导入完成之后。
 * **环境**: GUI 子进程，QEventLoop。
@@ -140,11 +146,140 @@ nb plugin install nonebot_plugin_lazytea
 * **描述**: 该文件负责 UI 的构建与交互。**严禁包含或依赖 asyncio/nonebot 相关代码**。
 * **入口类**: 定义一个名为 `ShowMyPlugin` 的类，继承自 `QWidget`。LazyTea 将自动实例化这个类作为您的插件页面。
 
-### **注意事项**
+##### **注意事项**
 
 1. 为使自动生成的配置页更易懂，建议使用 `Pydantic` 的 `Field(description="...")` 来描述配置项。
 2. 若配置项使用了 non-serializable 对象，建议实现 Pydantic 提供的字段序列化与数据转换方法。
 3. 为确保权限管理的最佳兼容性，建议您使用标准的 `Rule` 类型或 `alc` 的规则。
+
+#### 方案二：HTML
+
+您可以为您的插件打造专属配置页面，替代 LazyTea 的自动生成页面。
+
+* **技术栈要求**: 自定义 UI 必须使用HTML，若使用外部本地css/js，需要符合规范。
+* **启用开关**: 必须在元数据中将 `ui_support` **和** `html_exists` 设为 `True`。
+* **解耦设计**: 您的插件**无需将 LazyTea 作为强制依赖**。当用户安装 LazyTea 时，UI 会自动加载；反之，您的插件将以无 UI 模式正常运行。
+* 优势：高度自定义，可在 远程桌面端 / Web 使用，开发便捷
+* 劣势：需要遵循`LazyTea`定义的标准以保证可用，部分`LazyTea`连携功能可能受限
+
+在您插件包的顶层目录（`__init__.py` 所在目录），创建以下文件，LazyTea 将会自动发现并加载它：
+
+##### `__call__.py`
+
+* **时机**: GUI 加载完成之后。
+* **环境**: 主进程，Async Loop。
+* **SDK**: `from nonebot_plugin_lazytea.sdk import SDK_nb`
+* **描述**: 您可以在此编写与 NoneBot2 主体交互的代码。
+* **配置热重载**: 您可以注册一个与插件包**导入名同名**的函数。当配置更新时，LazyTea 会调用此函数，并将最新的配置实例作为唯一参数传入。
+* **配置HTML请求处理器**：您可以注册一个与插件包**导入名.html**的函数，这个函数应当是`nonebot_plugin_lazytea.sdk`中的`HTMLFunction`类型，返回值为`PluginHTML`。
+
+##### 关于HTML请求处理器的具体说明
+
+```python
+class PluginHTML(BaseModel):
+    html: str = Field(..., description="插件主页面")
+    is_rendered: bool = Field(False, description="主页面是否已渲染")
+    context: Dict[str, Any] = Field({}, description="渲染上下文, 必须可JSON化")
+    includes: Dict[str, str] = Field({}, description="单独的css/js文件, key为名称, value为内容")
+```
+
+* 桌面端 / Web 均使用`jinja2`进行渲染。若你的页面已经自行渲染，无需`LazyTea`干涉，可以将`is_rendered`设置为 `True`。若设置为`False`，则模板语法需要遵循`jinja2`规范。
+*
+* 桌面端 / Web 渲染时允许传入自定义上下文。此外，我们还提供了一些默认上下文：
+  * plugin_name  :  插件名称。
+  * api_base_url  :  本地服务器的基础url，可用于与后端通信。
+  * version  ： `LazyTea`版本号，可用于多版本支持。
+
+##### 如何在HTML中与后端交互的系统性说明
+
+###### 概述
+
+`/api/plugin/{plugin_name}/custom_request` 是一个 `POST` 接口，用于处理插件的自定义请求。该接口与插件的自定义UI页面紧密配合，实现丰富的交互功能。
+
+###### 接口详情
+
+* **路径**: `/api/plugin/{plugin_name}/custom_request`
+* **方法**: `POST`
+* **参数**:
+
+  * `plugin_name`: 插件名称（路径参数）
+  * `body`: 请求体，类型为 `PluginCustomRequest`
+
+    * metthod :  在后端（NoneBot）注册的处理器方法名称
+    * pararms ：参数
+    * timeout ： 超时时间
+
+    return   在后端（NoneBot）对应处理器返回的原始数据的Json，`LazyTea`不会插手数据格式
+
+  ```python
+  class PluginCustomRequest(BaseModel):
+      method: str
+      params: Dict[str, Any] = Field(default_factory=dict)
+      timeout: float = 5.0
+  ```
+
+###### 1. UI页面渲染机制
+
+当用户访问插件的自定义UI页面（通过 `/plugin/{plugin_name}/custom_html`）时，系统会执行以下步骤：
+
+1. 从后端获取HTML模板和上下文数据。
+2. 使用 `Jinja2` 模板引擎渲染页面。
+3. 在模板的上下文中，系统会提供以下基础变量：
+   * `request`: 当前请求对象
+   * `plugin_name`: 插件名称
+   * `api_base_url`: API基础URL
+   * `version`: 系统版本
+   * 以及后端在渲染时返回的任何其他自定义上下文数据。
+
+###### 2. 在UI中发起自定义请求
+
+在你的插件HTML模板中，可以通过 JavaScript 向自定义请求接口发送数据。这是一个完整的示例：
+
+```html
+<form id="plugin-form">
+    <input type="text" name="param1" placeholder="参数1">
+    <input type="text" name="param2" placeholder="参数2">
+    <button type="submit">提交</button>
+</form>
+
+<script>
+document.getElementById('plugin-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData.entries());
+
+    try {
+        const response = await fetch(`{{ api_base_url }}/plugin/{{ plugin_name }}/custom_request`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+        console.log('插件响应:', result);
+
+        // 处理响应结果
+        if (response.ok) {
+            alert('操作成功！');
+        } else {
+            alert('操作失败: ' + result.detail);
+        }
+    } catch (error) {
+        console.error('请求失败:', error);
+        alert('请求失败，请检查网络连接');
+    }
+});
+</script>
+```
+
+###### 注意事项
+
+* **只读模式检查**: 接口会首先检查系统是否处于只读模式。如果是，请求将被拒绝并返回 `403 Forbidden` 错误。
+* **错误处理**: 请务必在前端 JavaScript 代码中妥善处理可能出现的网络错误或API返回的错误响应（如示例代码所示）。
+* **模板变量**: 在构建请求URL时，请充分利用模板上下文中提供的 `{{ api_base_url }}` 和 `{{ plugin_name }}` 变量，以确保URL的正确性和可移植性。
 
 <br>
 
@@ -156,8 +291,8 @@ nb plugin install nonebot_plugin_lazytea
 * [X]  **远程控制**: 提供独立的 GUI 客户端，允许远程操作您的 Bot 实例。
 * [ ]  **极致性能**: 持续优化内存占用，提供更轻快的体验。
 * [ ]  **生态合作**: 积极寻求与其他插件开发者的合作，共建 NoneBot 的 UI 生态。
-* [ ]  **多平台支持**: 探索在移动端支持的可能性。
-* [ ]  **更完善的用户支持**: 当项目在 GitHub 上获得 **50个 star** 时，我们将立即创建交流群。
+* [X]  **多平台支持**: 探索在移动端支持的可能性。
+* [X]  **更完善的用户支持**: 加入QQ群 972526136 以获得进一步支持。
 
 ### **版本管理**
 
@@ -173,10 +308,12 @@ nb plugin install nonebot_plugin_lazytea
 
 ### **你可能在寻找**（友情链接）
 
-* [LazyTea Client](https://github.com/hlfzsi/LazyTea-Client)：独立的桌面客户端，用于远程连接并管理 LazyTea 后端服务。
+* [LazyTea Client](https://github.com/hlfzsi/LazyTea-Client)：独立的桌面客户端，用于远程连接并管理 LazyTea 后端服务
+* [LazyTea Web](https://github.com/hlfzsi/LazyTea-Web)：现代化的 Web 管理界面，支持所有浏览器访问
+* [LazyTea Mobile](https://github.com/hlfzsi/LazyTea-mobile)：移动设备专用客户端，随时随地管理机器人
 * [NoneBot WebUI](https://webui.nbgui.top/)：✨ 新一代 NoneBot Web 管理界面 ✨
-* [nonebot_plugin_lazytea_shell_extension](https://github.com/hlfzsi/nonebot_plugin_lazytea_shell_extension/)：为 LazyTea 启用命令管理，允许通过聊天消息管理权限。
+* [nonebot_plugin_lazytea_shell_extension](https://github.com/hlfzsi/nonebot_plugin_lazytea_shell_extension/)：为 LazyTea 启用命令管理，允许通过聊天消息管理权限
 
 <br>
 
-![Star History](https://api.star-history.com/svg?repos=hlfzsi/LazyTea-Client,hlfzsi/nonebot_plugin_lazytea&type=Date)
+![Star History](https://api.star-history.com/svg?repos=hlfzsi/nonebot_plugin_lazytea,hlfzsi/LazyTea-Client,hlfzsi/LazyTea-Web&type=Date)
