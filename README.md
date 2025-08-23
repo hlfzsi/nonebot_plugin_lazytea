@@ -250,7 +250,7 @@ document.getElementById('plugin-form').addEventListener('submit', async (e) => {
     const data = Object.fromEntries(formData.entries());
 
     try {
-        const response = await fetch(`{{ api_base_url }}/plugin/{{ plugin_name }}/custom_request`, {
+        const response = await fetch(`{{ api_base_url }}/api/plugin/{{ plugin_name }}/custom_request`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
