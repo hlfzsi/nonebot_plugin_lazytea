@@ -1,5 +1,5 @@
 import os
-import ujson
+import orjson
 from typing import Any, List, Dict, Optional
 from PySide6.QtGui import (QColor, QPixmap,
                            QFontDatabase)
@@ -14,7 +14,7 @@ from .utils.version_check import VersionUtils
 from .utils.subpages.config_page import ConfigEditor
 from .utils.Qcomponents.MessageBox import MessageBoxBuilder, MessageBoxConfig, ButtonConfig
 from .utils.Qcomponents.networkmanager import ReleaseNetworkManager
-from .utils.ui_types.plugins import PluginInfo
+from .utils.ui_types.plugins import PluginInfo, PluginHTML
 from .background.start import name_module
 from .utils.client import talker, ResponsePayload
 from .utils.tealog import logger
@@ -29,6 +29,7 @@ class PluginCard(QFrame):
     """插件卡片"""
     success_signal = Signal(ResponsePayload)
     update_signal = Signal(ResponsePayload)
+    html_success_signal = Signal(ResponsePayload)
 
     def __init__(self, plugin_data: PluginInfo, parent=None):
         super().__init__(parent)
@@ -37,6 +38,7 @@ class PluginCard(QFrame):
         self.icon_pixmap = None
         self.success_signal.connect(self._show_plugin_subpage)
         self.update_signal.connect(self._handle_update)
+        self.html_success_signal.connect(self._show_plugin_html)
         self._load_icon()
         self._init_style()
         self._init_ui()
@@ -62,12 +64,50 @@ class PluginCard(QFrame):
                 logger.warning(f"加载插件 {plugin_name} 时配置页面未找到父控件")
 
         else:
-            talker.send_request("get_plugin_config",
-                                success_signal=self.success_signal, name=self.plugin_data.get("name"))
+            if self.plugin_data["meta"]["html_exists"]:
+                talker.send_request(
+                    "get_plugin_custom_html", timeout=5, success_signal=self.html_success_signal, plugin_name=self.plugin_data.get("name"))
+            else:
+                talker.send_request("get_plugin_config",
+                                    success_signal=self.success_signal, name=self.plugin_data.get("name"))
+
+    def _show_plugin_html(self, response: ResponsePayload):
+        from jinja2 import Environment
+        from .utils.plugin_html import DictLoader
+        from .utils.Qcomponents.light_http import ControllableServer
+        import webbrowser
+
+        data: PluginHTML = response.data
+        template_string = data["html"]
+        is_rendered = data.get("is_rendered", False)
+        plugin_context = data.get("context", {})
+        includes = data.get("includes", {})
+
+        final_html = None
+        port = ControllableServer.get_instance().port
+        ControllableServer.get_instance().start()
+        plugin_name = self.plugin_data.get("name")
+
+        if is_rendered:
+            final_html = template_string
+        else:
+            jinja_env = Environment(loader=DictLoader(includes))
+            template = jinja_env.from_string(template_string)
+            context = {
+                "plugin_name": self.plugin_data.get("name"),
+                "api_base_url": f"http://127.0.0.1:{port}",
+                "version": os.getenv("UIVERSION", "Unknown"),
+                **plugin_context,
+            }
+            final_html = template.render(context)
+        ControllableServer.get_instance().set_path(
+            path=f"/{plugin_name}", html_content=final_html)
+        webbrowser.open_new_tab(
+            f"http://127.0.0.1:{port}/{plugin_name}")
 
     def _show_plugin_subpage(self, response: ResponsePayload):
         schema: Dict[str, Any] = response.data.get("schema")  # type: ignore
-        data: Dict[str, Any] = ujson.loads(
+        data: Dict[str, Any] = orjson.loads(
             response.data.get("data", ""))  # type: ignore
         editor = ConfigEditor(schema, data, self.plugin_data.get("module"))
 
@@ -318,7 +358,7 @@ class PluginCard(QFrame):
         instead_widget = self._has_plugin_widget()
 
         # 仅在插件有配置或提供页面时添加配置菜单项
-        if self.plugin_data["meta"]["config_exist"] or instead_widget:
+        if self.plugin_data["meta"]["config_exists"] or instead_widget or (self.plugin_data["meta"]["ui_support"] and self.plugin_data["meta"]["html_exists"]):
             config_action = menu.addAction("⚙️ 插件配置")
             actions.append((config_action, self._on_config_clicked))
             menu.addSeparator()

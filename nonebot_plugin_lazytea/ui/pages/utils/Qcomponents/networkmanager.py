@@ -1,6 +1,6 @@
-import os
-import ujson
+import orjson
 import threading
+
 from PySide6.QtCore import QObject, Signal, QUrl
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 
@@ -66,7 +66,7 @@ class ReleaseNetworkManager(QObject):
         if reply.error() == QNetworkReply.NetworkError.NoError:
             data = bytes(reply.readAll().data()).decode()
             try:
-                response = ujson.loads(data)
+                response = orjson.loads(data)
                 self.request_finished.emit("github_release", {
                     "success": True,
                     "version": response.get("tag_name", "").lstrip("v")

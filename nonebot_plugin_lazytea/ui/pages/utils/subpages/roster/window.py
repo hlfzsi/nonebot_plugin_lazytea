@@ -1,5 +1,6 @@
-import ujson
 from typing import Dict, Optional, Tuple, Any
+
+import orjson
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QTreeWidget,
     QTreeWidgetItem, QGroupBox, QCheckBox, QListWidget,
@@ -499,7 +500,7 @@ class PermissionConfigurator(QWidget):
 
     def save_config(self) -> None:
         talker.send_request("sync_matchers", success_signal=self.success_signal,
-                            error_signal=self.error_signal, new_roster=ujson.dumps(ReadableRoster.get_config()))
+                            error_signal=self.error_signal, new_roster=orjson.dumps(ReadableRoster.get_config()))
 
     def _on_save_success(self, result: ResponsePayload) -> None:
         self.config_updated.emit(ReadableRoster.get_config())

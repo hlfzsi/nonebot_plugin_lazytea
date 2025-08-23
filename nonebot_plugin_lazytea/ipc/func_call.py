@@ -1,14 +1,17 @@
 import asyncio
+import base64
 import importlib
 import sys
 import time
-import ujson
-from typing import Any, Dict, List, Set, Type, Union, get_origin
+import orjson
+import aiofiles
+from typing import Any, Dict, List, Optional, Set, Tuple, Type, Union, get_origin
 from pydantic import BaseModel, ValidationError
 from nonebot.plugin import get_loaded_plugins, get_plugin_by_module_name
 from nonebot import get_plugin_config as nb_config, logger, get_bot
 
 from .server import Server
+from .models import PluginHTML
 from ..utils.config import _config
 from ..utils.commute import bot_off_line, send_event
 from .envhandler import EnvWriter
@@ -35,7 +38,7 @@ def json_config(config: Type[BaseModel]):
     }
 
 
-def ujson_default(obj):
+def orjson_default(obj):
     if isinstance(obj, Set):
         return list(obj)
     return "Error"
@@ -76,7 +79,7 @@ def _preprocess_data_for_coercion(data: Dict[str, Any], model: Type[BaseModel]) 
             continue
 
         try:
-            processed_data[key] = ujson.loads(value)
+            processed_data[key] = orjson.loads(value)
         except (ValueError, TypeError):
             pass
 
@@ -90,6 +93,40 @@ def _preprocess_data_for_coercion(data: Dict[str, Any], model: Type[BaseModel]) 
     return processed_data
 
 
+@server.register_handler(method="read_files")
+async def read_files(paths: List[str], keys: Optional[List[str]] = None) -> Dict[str, str]:
+    """
+    Args:
+        paths (List[str])
+        keys (Optional[List[str]], optional)
+
+    Returns:
+        Dict[str, str]: 正常返回 key : base64 ascii 编码的文件内容
+    """
+    if not paths:
+        return {}
+
+    if not keys:
+        keys = paths
+    else:
+        if len(keys) != len(paths):
+            return {"error": "keys and paths must have the same length"}
+
+    async def read_file(path: str, key: str) -> Tuple[str, str]:
+        try:
+            async with aiofiles.open(path, 'rb') as f:
+                content = await f.read()
+            return key, base64.b64encode(content).decode('ascii')
+        except Exception as e:
+            logger.exception(f"读取文件 {path} 时出现错误 {e}")
+            return key, ""
+
+    tasks = [read_file(path, key) for path, key in zip(paths, keys)]
+    results = await asyncio.gather(*tasks)
+
+    return dict(results)
+
+
 @server.register_handler(method="get_plugins")
 def get_plugins():
     plugins = get_loaded_plugins()
@@ -99,8 +136,12 @@ def get_plugins():
                                      {"name": plugin.metadata.name if plugin.metadata else None,
                                       "description": plugin.metadata.description if plugin.metadata else "暂无描述",
                                       "homepage": plugin.metadata.homepage if plugin.metadata else None,
-                                      "config_exist": True if plugin.metadata and plugin.metadata.config else False,
+                                      "config_exist": True if plugin.metadata and plugin.metadata.config else False,  # deprecated
+                                      "config_exists": True if plugin.metadata and plugin.metadata.config else False,
                                       "icon_abspath": "",
+                                      "pip_name": plugin.name,
+                                      "ui_support": False,
+                                      "html_exists": False,
                                       "author": "未知作者",
                                       "version": "未知版本",
                                       **(plugin.metadata.extra if plugin.metadata and plugin.metadata.extra else {}),
@@ -108,8 +149,8 @@ def get_plugins():
                                  }
                    for plugin in plugins}
 
-    plugin_json = ujson.dumps(plugin_dict, default=ujson_default)
-    return ujson.loads(plugin_json)
+    plugin_json = orjson.dumps(plugin_dict, default=orjson_default)
+    return orjson.loads(plugin_json)
 
 
 @server.register_handler(method="get_plugin_config")
@@ -232,7 +273,7 @@ def ui_load(plugins_to_load: List):
 async def bot_switch(bot_id: str, platform: str, is_online_now: bool):
     """
     准备下线: is_online_now = False
-    
+
     准备上线: is_online_now = True
     """
     if is_online_now:
@@ -253,3 +294,20 @@ async def bot_switch(bot_id: str, platform: str, is_online_now: bool):
             "time": int(time.time())
         }
         await send_event("bot_disconnect", data)
+
+
+@server.register_handler("get_plugin_custom_html")
+async def get_plugin_custom_html(plugin_name: str) -> Dict[str, Any]:
+    handler = server.handlers.get(f"{plugin_name}.html")
+    if not handler:
+        return {"error": "Method not found"}
+
+    if asyncio.iscoroutinefunction(handler):
+        result = await handler()
+    else:
+        result = handler()
+
+    if isinstance(result, PluginHTML):
+        return result.model_dump()
+
+    return {"error": "Invalid response from handler"}

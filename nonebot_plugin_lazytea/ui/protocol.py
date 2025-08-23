@@ -1,4 +1,4 @@
-import ujson
+import orjson
 from typing import Any, Dict, Optional, Tuple
 from pydantic import BaseModel, Field, ValidationError
 import time
@@ -47,7 +47,7 @@ class ProtocolMessage:
             "header": header.model_dump(),
             "payload": payload
         }
-        return ujson.dumps(message, default=default) + cls.SEPARATOR
+        return orjson.dumps(message, default=default).decode("utf-8") + cls.SEPARATOR
 
     @classmethod
     def decode(cls, raw_data: str) -> Tuple[Optional[MessageHeader], Any]:
@@ -57,10 +57,10 @@ class ProtocolMessage:
             >>> ProtocolMessage.decode(raw)
         """
         try:
-            data = ujson.loads(raw_data.strip(cls.SEPARATOR))
+            data = orjson.loads(raw_data.strip(cls.SEPARATOR))
             header = MessageHeader(**data["header"])
             return header, data.get("payload")
-        except (ujson.JSONDecodeError, KeyError, ValidationError) as e:
+        except (orjson.JSONDecodeError, KeyError, ValidationError) as e:
             return None, None
 
 

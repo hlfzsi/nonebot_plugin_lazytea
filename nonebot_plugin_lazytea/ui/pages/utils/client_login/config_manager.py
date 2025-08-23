@@ -1,4 +1,4 @@
-import ujson
+import orjson
 from pathlib import Path
 from typing import Optional
 
@@ -54,9 +54,10 @@ class ConnectionConfigManager:
             return None
         try:
             with open(self._config_path, "r", encoding="utf-8") as f:
-                data = ujson.load(f)
+                content = f.read()
+                data = orjson.loads(content)
                 return ConnectionDetails(**data)
-        except (IOError, ujson.JSONDecodeError, ValidationError) as e:
+        except (IOError, orjson.JSONDecodeError, ValidationError) as e:
             logger.warning(
                 f"Failed to load or validate config file {self._config_path}: {e}")
             return None

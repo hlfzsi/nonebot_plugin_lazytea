@@ -1,6 +1,6 @@
 import time
 from threading import Lock
-import ujson
+import orjson
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 from nonebot import get_driver, logger
 from nonebot.typing import T_State
@@ -366,8 +366,8 @@ async def handle_api_call(bot: Bot, api: str, data: Dict[str, Any]):
             else:
                 truncated_data[key] = value_str
 
-        formatted_data = ujson.dumps(
-            truncated_data, indent=4, allow_nan=True, ensure_ascii=False)
+        formatted_data = orjson.dumps(
+            truncated_data, option=orjson.OPT_INDENT_2).decode("utf-8")
 
         logger.debug(f"未捕获的api调用: {api}\n{formatted_data}")
 

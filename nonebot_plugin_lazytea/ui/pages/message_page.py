@@ -1,7 +1,7 @@
 import time
-import ujson
 from typing import Dict, List, Literal, Optional, Tuple
 
+import orjson
 from PySide6.QtCore import Qt, QTimer, QPoint, Signal, QMutex
 from PySide6.QtWidgets import (QVBoxLayout, QHBoxLayout, QCheckBox, QListWidget,
                                QListWidgetItem, QLabel, QWidget, QApplication,
@@ -201,7 +201,7 @@ class MessagePage(PageBase):
         first_visible_item = self.list_widget.itemAt(0, 0)
 
         for _, meta, content, bot, _ in reversed(results):
-            meta = ujson.loads(meta)
+            meta = orjson.loads(meta)
             item = QListWidgetItem()
             bubble = MessageBubble(meta, content,
                                    BotToolKit.color.get(bot),
@@ -360,7 +360,7 @@ class MessagePage(PageBase):
             results, key=lambda r: order_map.get(r[0], float('inf')))
         self._clear_message_list()
         for _, meta, content, bot in sorted_results:
-            meta = ujson.loads(meta)
+            meta = orjson.loads(meta)
             self.add_message(meta, content, BotToolKit.color.get(bot))
 
     def exit_search(self):
@@ -682,7 +682,7 @@ class MessagePage(PageBase):
 
     def insert(self, type_: str, params: List):
         """插入消息到数据库"""
-        params[5] = ujson.dumps(params[5])
+        params[5] = orjson.dumps(params[5])
         final_params = tuple(params)
 
         get_database().execute_async("""
@@ -722,7 +722,7 @@ class MessagePage(PageBase):
                 page.earliest_loaded_id = min(ids)
 
         for msg_id, meta, content, bot, _ in reversed(results):
-            meta = ujson.loads(meta)
+            meta = orjson.loads(meta)
             self.add_message(meta, content, BotToolKit.color.get(bot))
 
     def on_enter(self):

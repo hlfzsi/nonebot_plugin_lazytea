@@ -1,5 +1,5 @@
 from enum import Enum
-import ujson
+import orjson
 from typing import Optional, Any, Literal
 from pydantic import BaseModel, field_validator
 from PySide6.QtGui import QColor
@@ -101,7 +101,7 @@ class ButtonConfig(BaseModel):
     def validate_custom_id(cls, value):
         if value is not None:
             try:
-                ujson.dumps(value)
+                orjson.dumps(value)
             except (TypeError, ValueError):
                 raise ValueError("custom_id must be serializable")
         return value

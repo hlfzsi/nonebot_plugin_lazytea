@@ -43,7 +43,7 @@ class PluginInit(QObject):
         if IS_RUN_ALONE:
             logger.info("以独立客户端运行, 跳过插件UI导入")
             return
-        
+
         for plugin_name in self.plugins_to_load:
             module_path = f"{plugin_name}.__ui__"
 
@@ -78,7 +78,9 @@ class PluginInit(QObject):
                 module = importlib.import_module(module_path)
                 name_module[plugin_name] = module
                 logger.success(f"成功导入插件UI模块: {module_path}")
-            except ImportError:
+            except ImportError as e:
+                if "No module named" in str(e):
+                    continue
                 logger.error(
                     f"导入 '{module_path}' 失败 (ImportError)。请检查文件是否存在及其内部导入是否正确。")
                 logger.error("详细错误信息:\n" + traceback.format_exc())
