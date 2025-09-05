@@ -6,7 +6,7 @@ from nonebot.rule import (
     StartswithRule, EndswithRule, FullmatchRule, IsTypeRule, ToMeRule
 )
 from nonebot_plugin_alconna.rule import AlconnaRule
-import ujson
+import orjson
 import xxhash
 
 
@@ -181,7 +181,7 @@ class MatcherInfo(BaseModel):
     def ensure_permission_frozenset(cls, v: Any) -> Dict[str, Dict[str, FrozenSet[str]]]:
         """确保权限数据转换为不可变集合"""
         if isinstance(v, str):
-            v = ujson.loads(v)
+            v = orjson.loads(v)
         if not isinstance(v, dict):
             v = {}
 
@@ -309,7 +309,7 @@ class MatcherRuleModel(BaseModel):
     @classmethod
     def from_json(cls, json_data: str) -> "MatcherRuleModel":
         """从JSON数据创建模型实例"""
-        data = ujson.loads(json_data)
+        data = orjson.loads(json_data)
         data = convert_lists_to_tuples(data)
         instance = cls.model_validate(data)
 
