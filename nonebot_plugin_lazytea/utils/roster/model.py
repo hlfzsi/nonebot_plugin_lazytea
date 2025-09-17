@@ -1,4 +1,4 @@
-from typing import Dict, Set, Tuple, Optional, FrozenSet, Any, List
+from typing import Dict, Set, Tuple, Optional, FrozenSet, Any, List, Union
 from pydantic import BaseModel, Field, field_validator, ConfigDict, field_serializer, model_serializer
 from nonebot.matcher import Matcher
 from nonebot.rule import (
@@ -34,37 +34,59 @@ class RuleData(BaseModel):
     def serialize_frozenset(self, value: FrozenSet[str], _info) -> List[str]:
         return list(value)
 
-    def __hash__(self) -> int:
-        hash_obj = xxhash.xxh64()
+    def _quick_hash(self) -> int:
+        """
+        快速哈希方法，用于运行时内存操作。
+        """
+        return hash((
+            self.commands,
+            self.shell_commands,
+            self.regex_patterns,
+            self.keywords,
+            self.startswith,
+            self.endswith,
+            self.fullmatch,
+            self.alconna_commands,
+            self.event_types,
+            self.to_me
+        ))
 
-        # 合并所有字段的字符串并排序
+    def _persist_hash(self) -> int:
+        """
+        持久化哈希方法，用于存储或跨进程通信。
+        保证哈希值在不同环境、不同时间下的一致性。
+        """
+        hash_obj = xxhash.xxh64()
         all_data = []
         for cmd in self.commands:
-            all_data.append(str(tuple(cmd)))
+            all_data.append(f"cmd:{str(tuple(cmd))}")
         for shell_cmd in self.shell_commands:
-            all_data.append(str(tuple(shell_cmd)))
+            all_data.append(f"scmd:{str(tuple(shell_cmd))}")
         for pattern in self.regex_patterns:
-            all_data.append(pattern)
+            all_data.append(f"re:{pattern}")
         for keyword in self.keywords:
-            all_data.append(keyword)
+            all_data.append(f"kw:{keyword}")
         for prefix in self.startswith:
-            all_data.append(prefix)
+            all_data.append(f"sw:{prefix}")
         for suffix in self.endswith:
-            all_data.append(suffix)
+            all_data.append(f"ew:{suffix}")
         for full in self.fullmatch:
-            all_data.append(full)
+            all_data.append(f"fm:{full}")
         for event_type in self.event_types:
-            all_data.append(event_type)
+            all_data.append(f"evt:{event_type}")
         for alc_cmd in self.alconna_commands:
-            all_data.append(alc_cmd)
-        all_data.append(str(self.to_me))
+            all_data.append(f"alc:{alc_cmd}")
+        all_data.append(f"tome:{str(self.to_me)}")
 
         all_data.sort()
 
         for item in all_data:
-            hash_obj.update(item.encode())
+            hash_obj.update(item.encode('utf-8'))
 
         return int.from_bytes(hash_obj.digest(), byteorder='big')
+
+    def __hash__(self) -> int:
+        return self._quick_hash()
 
     @field_validator(
         "commands", "shell_commands", "regex_patterns", "keywords",
@@ -140,7 +162,7 @@ class RuleData(BaseModel):
 class MatcherInfo(BaseModel):
     """匹配器信息模型，支持序列化"""
     rule: RuleData
-    permission: Dict[str, Dict[str, FrozenSet[str]]] = Field(
+    permission: Dict[str, Dict[str, Union[FrozenSet[str], Set[str], List[str]]]] = Field(   # key: white_list OR ban_list
         default_factory=lambda: {
             "white_list": {"user": frozenset(), "group": frozenset()},
             "ban_list": {"user": frozenset(), "group": frozenset()},
@@ -150,17 +172,48 @@ class MatcherInfo(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def __hash__(self) -> int:
+    def _quick_hash(self) -> int:
+        """
+        快速哈希方法。
+        """
+        perm_tuple = (
+            ("white_list",
+                ("user", self.permission["white_list"]["user"]),
+                ("group", self.permission["white_list"]["group"])
+             ),
+            ("ban_list",
+                ("user", self.permission["ban_list"]["user"]),
+                ("group", self.permission["ban_list"]["group"])
+             )
+        )
+        return hash((
+            self.rule,
+            perm_tuple,
+            self.is_on
+        ))
+
+    def _persist_hash(self) -> int:
+        """
+        持久化哈希方法。
+        """
         hash_obj = xxhash.xxh64()
-        hash_obj.update(str(hash(self.rule)).encode())
+        hash_obj.update(str(self.rule._persist_hash()).encode('utf-8'))
 
-        for perm_type in ["white_list", "ban_list"]:
-            for id_type in ["user", "group"]:
+        perm_data = []
+        for perm_type in sorted(self.permission.keys()):  # white_list, ban_list
+            # group, user
+            for id_type in sorted(self.permission[perm_type].keys()):
                 for item in sorted(self.permission[perm_type][id_type]):
-                    hash_obj.update(item.encode())
+                    perm_data.append(f"{perm_type}:{id_type}:{item}")
 
-        hash_obj.update(str(self.is_on).encode())
+        for item in perm_data:
+            hash_obj.update(item.encode('utf-8'))
+
+        hash_obj.update(str(self.is_on).encode('utf-8'))
         return int.from_bytes(hash_obj.digest(), byteorder='big')
+
+    def __hash__(self) -> int:
+        return self._quick_hash()
 
     @field_serializer('permission')
     def serialize_permission(self, value: Dict[str, Dict[str, FrozenSet[str]]], _info) -> Dict[str, Dict[str, List[str]]]:
@@ -304,7 +357,7 @@ class MatcherRuleModel(BaseModel):
 
     def __str__(self) -> str:
         """返回格式化字符串表示"""
-        return "MatcherRuleModel" + self.model_dump_json(indent=2)
+        return "MatcherRuleModel\n" + self.model_dump_json(indent=2)
 
     @classmethod
     def from_json(cls, json_data: str) -> "MatcherRuleModel":
@@ -332,8 +385,18 @@ class MatcherRuleModel(BaseModel):
 
                 for matcher in matcher_set:
                     rule_data = RuleData.extract_rule(matcher)
-                    matcher_info = MatcherInfo(rule=rule_data)
+                    matcher_info_kwargs = {
+                        "rule": rule_data,
+                        "is_on": getattr(matcher, "lazytea_is_on", True)
+                    }
+
+                    if hasattr(matcher, "lazytea_permission"):
+                        matcher_info_kwargs["permission"] = getattr(
+                            matcher, "lazytea_permission")
+
+                    matcher_info = MatcherInfo(**matcher_info_kwargs)
                     plugin_matchers.add_matcher(matcher_info)
+
                 bot_plugins.plugins[plugin_name] = plugin_matchers
 
             model.bots[bot_id] = bot_plugins
