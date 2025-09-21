@@ -1,4 +1,4 @@
-from typing import Dict, Set, Tuple, Optional, FrozenSet, Any, List, Union
+from typing import Dict, Set, Tuple, Optional, FrozenSet, Any, List
 from pydantic import BaseModel, Field, field_validator, ConfigDict, field_serializer, model_serializer
 from nonebot.matcher import Matcher
 from nonebot.rule import (
@@ -162,7 +162,7 @@ class RuleData(BaseModel):
 class MatcherInfo(BaseModel):
     """匹配器信息模型，支持序列化"""
     rule: RuleData
-    permission: Dict[str, Dict[str, Union[FrozenSet[str], Set[str], List[str]]]] = Field(   # key: white_list OR ban_list
+    permission: Dict[str, Dict[str, FrozenSet[str]]] = Field(   # key: white_list OR ban_list
         default_factory=lambda: {
             "white_list": {"user": frozenset(), "group": frozenset()},
             "ban_list": {"user": frozenset(), "group": frozenset()},
@@ -229,28 +229,51 @@ class MatcherInfo(BaseModel):
             },
         }
 
-    @field_validator("permission", mode="before")
-    @classmethod
-    def ensure_permission_frozenset(cls, v: Any) -> Dict[str, Dict[str, FrozenSet[str]]]:
-        """确保权限数据转换为不可变集合"""
-        if isinstance(v, str):
+
+@field_validator("permission", mode="before")
+@classmethod
+def ensure_permission_frozenset(cls, v: Any) -> Dict[str, Dict[str, FrozenSet[str]]]:
+    """确保权限数据转换为不可变集合，并且结构严格符合预期"""
+    if isinstance(v, str):
+        try:
             v = orjson.loads(v)
-        if not isinstance(v, dict):
-            v = {}
+        except orjson.JSONDecodeError:
+            raise ValueError("permission 字段不是合法的 JSON 字符串")
 
-        white_list = v.get("white_list", {})
-        ban_list = v.get("ban_list", {})
+    if not isinstance(v, dict):
+        v = {}
 
-        return {
-            "white_list": {
-                "user": frozenset(white_list.get("user", [])),
-                "group": frozenset(white_list.get("group", [])),
-            },
-            "ban_list": {
-                "user": frozenset(ban_list.get("user", [])),
-                "group": frozenset(ban_list.get("group", [])),
-            },
-        }
+    _ALLOWED_OUTER_KEYS = {"white_list", "ban_list"}
+    _ALLOWED_INNER_KEYS = {"user", "group"}
+
+    provided_outer_keys = set(v.keys())
+    if not provided_outer_keys.issubset(_ALLOWED_OUTER_KEYS):
+        extra_keys = provided_outer_keys - _ALLOWED_OUTER_KEYS
+        raise ValueError(
+            f"permission 只允许包含 {list(_ALLOWED_OUTER_KEYS)}，但收到了额外键: {list(extra_keys)}")
+
+    white_list = v.get("white_list", {})
+    ban_list = v.get("ban_list", {})
+
+    for name, inner_dict in [("white_list", white_list), ("ban_list", ban_list)]:
+        if not isinstance(inner_dict, dict):
+            raise ValueError(f"{name} 必须是一个字典")
+        provided_inner_keys = set(inner_dict.keys())
+        if not provided_inner_keys.issubset(_ALLOWED_INNER_KEYS):
+            extra_keys = provided_inner_keys - _ALLOWED_INNER_KEYS
+            raise ValueError(
+                f"{name} 只允许包含 {list(_ALLOWED_INNER_KEYS)}，但收到了额外键: {list(extra_keys)}")
+
+    return {
+        "white_list": {
+            "user": frozenset(white_list.get("user", [])),
+            "group": frozenset(white_list.get("group", [])),
+        },
+        "ban_list": {
+            "user": frozenset(ban_list.get("user", [])),
+            "group": frozenset(ban_list.get("group", [])),
+        },
+    }
 
 
 class PluginMatchers(BaseModel):
@@ -258,12 +281,6 @@ class PluginMatchers(BaseModel):
     matchers: Set[MatcherInfo] = Field(default_factory=set)
     rule_mapping: Dict[int, MatcherInfo] = Field(
         default_factory=dict, exclude=True)
-    default_permission: Dict[str, Dict[str, FrozenSet[str]]] = Field(
-        default_factory=lambda: {
-            "white_list": {"user": frozenset(), "group": frozenset()},
-            "ban_list": {"user": frozenset(), "group": frozenset()},
-        }
-    )
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -363,7 +380,6 @@ class MatcherRuleModel(BaseModel):
     def from_json(cls, json_data: str) -> "MatcherRuleModel":
         """从JSON数据创建模型实例"""
         data = orjson.loads(json_data)
-        data = convert_lists_to_tuples(data)
         instance = cls.model_validate(data)
 
         for bot_plugins in instance.bots.values():
@@ -402,12 +418,3 @@ class MatcherRuleModel(BaseModel):
             model.bots[bot_id] = bot_plugins
 
         return model
-
-
-def convert_lists_to_tuples(data):
-    if isinstance(data, dict):
-        return {k: convert_lists_to_tuples(v) for k, v in data.items()}
-    elif isinstance(data, list):
-        return tuple(convert_lists_to_tuples(item) for item in data)
-    else:
-        return data
