@@ -180,7 +180,7 @@ class EnvWriter:
         # 新增目标插件区块
         output.append(self.plugin_begin)
         output.extend(
-            f"{k}={orjson.dumps(v, default=self.json_default).decode("utf-8")}" for k, v in data.items())
+            f"{k}={orjson.dumps(v, default=self.json_default).decode('utf-8')}" for k, v in data.items())
         output.append(self.plugin_end)
 
         return output

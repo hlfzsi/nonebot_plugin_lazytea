@@ -152,7 +152,7 @@ class OverviewPage(PageBase):
         {
             "key": "update_date",
             "title": "更新日期",
-            "content": "2025-9-5",  # 这个日期由开发者手动提供
+            "content": "2025-11-10",  # 这个日期由开发者手动提供
             "dynamic": False
         },
         {

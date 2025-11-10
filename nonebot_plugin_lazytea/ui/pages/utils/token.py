@@ -1,4 +1,4 @@
-"""为保证低内存占用, 此处只能使用此类方式进行预处理"""
+"""为保证低内存占用, 此处使用该方式进行预处理"""
 import re
 from typing import List
 
@@ -16,8 +16,8 @@ def tokenize(sentence: str) -> List[str]:
     for token in initial_tokens:
         if '\u4e00' <= token[0] <= '\u9fa5':
             if len(token) > 1:
-                for i in range(len(token) - 1):
-                    final_tokens.append(token[i:i+2])
+                final_tokens.extend([token[i:i+2]
+                                    for i in range(len(token) - 1)])
             else:
                 final_tokens.append(token)
 
